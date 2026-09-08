@@ -4,6 +4,7 @@
 !data/**/*.json
 data/temp/
 sets/
+*.DS_Store
 
 .idea/
 *.iml
