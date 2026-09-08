@@ -6,7 +6,7 @@
     <meta name="MobileOptimized" content="320" />
     <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, width=device-width, user-scalable=no" />
 
-    <title>WynnBuilder CLI</title>
+    <title>WynnBuilder</title>
     <link rel="icon" href="../media/icons/new/builder.png" type="image/icon type">
 
     <meta name="viewport" content="width=device-width, initial-scale=.45, user-scalable=no">
@@ -15,69 +15,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito&display=swap" rel="stylesheet">
-    <link href="../thirdparty/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <link href="/thirdparty/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
 
-    <link rel="stylesheet" href="../thirdparty/autoComplete.min.css">
+    <link rel="stylesheet" href="/thirdparty/autoComplete.min.css">
 
     <link rel="stylesheet" href="../css/sq2bs.css">
     <link rel="stylesheet" href="../css/sidebar.css">
     <link rel="stylesheet" href="../css/wynnstyles.css">
-    <link rel="stylesheet" href="../css/terminal.css">
 </head>
-<body class="text-light terminal-active" id = "body">
-    <!-- WynnBuilder Browser CLI View -->
-    <div id="terminal-view">
-        <div class="term-navbar">
-            <div class="term-nav-left">
-                <div class="term-controls">
-                    <span class="term-dot term-dot-red" title="WynnBuilder CLI"></span>
-                    <span class="term-dot term-dot-yellow"></span>
-                    <span class="term-dot term-dot-green"></span>
-                </div>
-                <div class="term-title">
-                    <img src="../media/icons/new/builder.png" alt="WynnBuilder" style="height: 18px;">
-                    <span>WynnBuilder CLI <small style="color: var(--term-muted); font-size: 11px;">v7.0.20</small></span>
-                </div>
-                <div class="term-nav-links d-none d-md-flex">
-                    <a href="../crafter/" class="term-nav-link">Crafter</a>
-                    <a href="../items/" class="term-nav-link">Atlas</a>
-                    <a href="../custom/" class="term-nav-link">Custom</a>
-                    <a href="../map/" class="term-nav-link">GPS</a>
-                    <a href="../wynnfo/" class="term-nav-link">Wynnfo</a>
-                    <a href="https://discord.gg/CGavnAnerv" target="_blank" class="term-nav-link">Discord</a>
-                </div>
-            </div>
-            <div class="term-nav-right">
-                <span id="term-status" class="term-status-pill status-loading">● Loading...</span>
-                <button class="term-btn" onclick="window.wbCLI.cmdGui();" title="Toggle graphical interface">Toggle GUI</button>
-            </div>
-        </div>
-
-        <div class="term-quick-bar">
-            <button class="term-quick-btn" data-term-cmd="help">help</button>
-            <button class="term-quick-btn" data-term-cmd="build">build</button>
-            <button class="term-quick-btn" data-term-cmd="atree">atree</button>
-            <button class="term-quick-btn" data-term-cmd="atree takable">takable</button>
-            <button class="term-quick-btn" data-term-cmd="stats">stats</button>
-            <button class="term-quick-btn" data-term-cmd="damage">damage</button>
-            <button class="term-quick-btn" data-term-cmd="sp auto">sp auto</button>
-            <button class="term-quick-btn" data-term-cmd="optimize">optimize</button>
-            <button class="term-quick-btn" data-term-cmd="link">link</button>
-            <button class="term-quick-btn" data-term-cmd="clear">clear</button>
-        </div>
-
-        <div id="term-output"></div>
-
-        <div class="term-input-container">
-            <span id="term-prompt-prefix" class="term-prompt-prefix">[No Class Lvl 106] wb&gt; </span>
-            <input id="term-input" class="term-input" type="text" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type a command (e.g. 'help', 'build', 'equip helmet Morph-Stardust')...">
-        </div>
-    </div>
-
-    <!-- WynnBuilder Classic GUI Backend -->
-    <div id="builder-backend">
-        <button class="btn btn-sm btn-outline-info" onclick="window.wbCLI.cmdGui();" style="position: fixed; bottom: 15px; right: 15px; z-index: 9999; font-family: monospace; font-weight: bold; background: rgba(13,17,23,0.95); border-width: 2px;">CLI Terminal</button>
-        <!-- main -->
+<body class="text-light" id = "body">
+    <!-- main -->
     <div id="main-sidebar" class="sidebar dark-7 dark-shadow">
         <a href = ""><img src="../media/icons/new/builder.png" alt = "WynnBuilder" title = "WynnBuilder"><b>WynnBuilder</b></a>
         <a href = "../crafter/"><img src = "../media/icons/new/crafter.png" alt = "WynnCrafter" title = "WynnCrafter"><b>WynnCrafter</b></a>
@@ -314,7 +261,7 @@
                                                 <input class="equipment-input text-light form-control" id="bracelet-choice" name="bracelet-choice" placeholder="No bracelet" value="" tabindex="2"/>
                                             </div>
                                             <div class="col d-flex justify-content-end" style="height: 100%;">
-
+                                                
                                             </div>
                                         </div>
                                     </div>
@@ -513,7 +460,7 @@
                             </div>
                         </div>
                     </div>
-
+                    
                     <div class="col mb-1 text-center scaled-font dark-5 rounded dark-shadow">
                         <div class="row fw-bold dark-4 rounded-top">
                             <div id = "ability-boosts-btn" class="col dark-4u fake-button selected-btn" onclick="show_tab('ability-boosts', ['ability-boosts', 'powder-specials', 'raid-buffs'])">
@@ -1374,7 +1321,7 @@
                                                     <div class="col-3">
                                                         <div class="row row-cols-1 h-100 align-items-center">
                                                             <div class="col scaled-font fw-bold gx-3">
-                                                                Guild
+                                                                Guild 
                                                             </div>
                                                             <div class="col scaled-font fw-bold gx-3">
                                                                 Tome
@@ -1644,7 +1591,7 @@
                         <a href="../credits.txt" class="link">Additional credits</a>
                     </div>
                 </footer>
-            </div>
+            </div>  
         </div>
     </div>
     <div class="container h-75 mx-0 mx-lg-auto dark-2 border border-4 scaled-font align-self-center" style="position: fixed; z-index: 2000; overflow: auto; display: none;" id="search-container">
@@ -1664,7 +1611,7 @@
                         <label for="item-category-choice">Category:</label>
                         <input class="search-field" id="item-category-choice" name="item-category-choice" placeholder="Category"/>
                     </div>
-                    <div class="col-auto">
+                    <div class="col-auto">    
                         <label for="item-rarity-choice">Rarity:</label>
                         <input class="search-field" id="item-rarity-choice" name="item-rarity-choice" placeholder="Rarity"/>
                     </div>
@@ -1682,7 +1629,7 @@
                         <label for="filter2-choice">Filter 2:</label>
                         <input class="search-field" list="filter-items" id="filter2-choice" name="filter2-choice" placeholder=""/>
                     </div>
-                    <div class="col-auto" id="filter3-dropdown">
+                    <div class="col-auto" id="filter3-dropdown">    
                         <label for="filter3-choice">Filter 3:</label>
                         <input class="search-field" list="filter-items" id="filter3-choice" name="filter3-choice" placeholder=""/>
                     </div>
@@ -1698,11 +1645,10 @@
             </div>
         </div>
     </div>
-    </div><!-- /#builder-backend -->
-
+    
     <script type="text/javascript" src="../js/redirect_fork.js"></script>
-    <script src="../thirdparty/autoComplete.min.js"></script>
-    <script src="../thirdparty/macy@2"></script>
+    <script src="/thirdparty/autoComplete.min.js"></script>
+    <script src="/thirdparty/macy@2"></script>
     <script type="text/javascript" src="../js/utils.js"></script>
     <script type="text/javascript" src="../js/build_utils.js"></script>
     <script type="text/javascript" src="../js/computation_graph.js"></script>
@@ -1717,7 +1663,7 @@
     <script type="text/javascript" src="../js/load_ing.js"></script>
     <script type="text/javascript" src="../js/load_tome.js"></script>
     <script type="text/javascript" src="../js/load_aspect.js"></script>
-    <script type="text/javascript" src="../js/custom.js"></script>
+    <script type="text/javascript" src="../js/custom.js"></script> 
     <script type="text/javascript" src="../js/craft.js"></script>
     <script type="text/javascript" src="../js/mana_calc.js"></script>
     <script type="text/javascript" src="../js/builder/build.js"></script>
@@ -1728,6 +1674,11 @@
     <script type="text/javascript" src="../js/builder/builder_graph.js"></script>
     <script type="text/javascript" src="../js/builder/builder.js"></script>
     <script type="text/javascript" src="../js/builder/optimize.js"></script>
-    <script type="text/javascript" src="../js/builder/cli.js"></script>
+    <!--div id="graph_body" style="max-width: 100%; height: 100vh">
+        <button id="saveButton">JANKY Export SVG</button>
+        <a id="saveLink">savelink</a>
+    </div>
+    <script src="https://d3js.org/d3.v7.js"></script>
+    <script type="text/javascript" src="../js/debug/render_compute_graph.js"></script-->
 </body>
-</html>
+</html> 
