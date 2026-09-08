@@ -1,0 +1,460 @@
+/* WynnBuilder Terminal CLI Stylesheet */
+
+:root {
+    --term-bg: #0d1117;
+    --term-header-bg: #161b22;
+    --term-border: #30363d;
+    --term-fg: #c9d1d9;
+    --term-muted: #8b949e;
+    --term-prompt: #58a6ff;
+    --term-cursor: #58a6ff;
+    --term-success: #3fb950;
+    --term-warning: #d29922;
+    --term-danger: #f85149;
+    --term-info: #58a6ff;
+
+    /* Wynncraft Rarity Tiers */
+    --tier-mythic: #d63aff;
+    --tier-fabled: #ff5555;
+    --tier-legendary: #55ffff;
+    --tier-rare: #ff55ff;
+    --tier-unique: #ffff55;
+    --tier-set: #55ff55;
+    --tier-normal: #f0f6fc;
+    --tier-crafted: #38d9a9;
+    --tier-custom: #ff922b;
+
+    /* Elements */
+    --elem-earth: #2ecc71;
+    --elem-thunder: #ffd32a;
+    --elem-water: #4bcffa;
+    --elem-fire: #ff4d4d;
+    --elem-air: #f1f2f6;
+    --elem-neutral: #e4bb71;
+}
+
+body.terminal-active {
+    margin: 0;
+    padding: 0;
+    background-color: #030712;
+    color: var(--term-fg);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Container */
+#terminal-view {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    box-sizing: border-box;
+    background-color: var(--term-bg);
+}
+
+/* Top Navbar */
+.term-navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--term-header-bg);
+    border-bottom: 1px solid var(--term-border);
+    padding: 6px 14px;
+    font-size: 13px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.term-nav-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.term-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.term-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.term-dot-red { background-color: #ff5f56; }
+.term-dot-yellow { background-color: #ffbd2e; }
+.term-dot-green { background-color: #27c93f; }
+
+.term-title {
+    font-weight: 600;
+    color: #f0f6fc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.term-nav-links {
+    display: flex;
+    gap: 12px;
+    margin-left: 16px;
+}
+
+.term-nav-link {
+    color: var(--term-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+    font-size: 12px;
+}
+
+.term-nav-link:hover {
+    color: var(--term-fg);
+}
+
+.term-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.term-status-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+.status-loading {
+    background-color: rgba(210, 153, 34, 0.15);
+    color: var(--term-warning);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+.status-ready {
+    background-color: rgba(63, 185, 80, 0.15);
+    color: var(--term-success);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.term-btn {
+    background-color: #21262d;
+    border: 1px solid var(--term-border);
+    color: var(--term-fg);
+    padding: 3px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.term-btn:hover {
+    background-color: #30363d;
+    border-color: #8b949e;
+}
+
+/* Quick Bar */
+.term-quick-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background-color: #0b0f14;
+    border-bottom: 1px solid var(--term-border);
+    font-size: 11px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.term-quick-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: var(--term-muted);
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+
+.term-quick-btn:hover {
+    background-color: #21262d;
+    color: var(--term-prompt);
+    border-color: var(--term-prompt);
+}
+
+/* Main Terminal Output Area */
+#term-output {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.45;
+    font-size: 13.5px;
+    scroll-behavior: smooth;
+}
+
+/* Scrollbar */
+#term-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+#term-output::-webkit-scrollbar-track {
+    background: var(--term-bg);
+}
+
+#term-output::-webkit-scrollbar-thumb {
+    background: #21262d;
+    border-radius: 4px;
+}
+
+#term-output::-webkit-scrollbar-thumb:hover {
+    background: #30363d;
+}
+
+/* Line Types */
+.term-line {
+    margin: 0;
+    padding: 1px 0;
+}
+
+.term-line-cmd {
+    color: #e6edf3;
+    font-weight: 600;
+}
+
+.term-line-system {
+    color: var(--term-muted);
+}
+
+.term-line-error {
+    color: var(--term-danger);
+    font-weight: bold;
+}
+
+.term-line-warn {
+    color: var(--term-warning);
+}
+
+.term-line-success {
+    color: var(--term-success);
+}
+
+.term-line-info {
+    color: var(--term-info);
+}
+
+/* ASCII Banner */
+.term-banner {
+    color: #58a6ff;
+    font-weight: bold;
+    line-height: 1.15;
+    margin: 6px 0 12px 0;
+    text-shadow: 0 0 10px rgba(88, 166, 255, 0.3);
+}
+
+/* Wynncraft Tier Classes */
+.tier-mythic {
+    color: var(--tier-mythic);
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(214, 58, 255, 0.4);
+}
+
+.tier-fabled {
+    color: var(--tier-fabled);
+    font-weight: bold;
+    text-shadow: 0 0 6px rgba(255, 85, 85, 0.4);
+}
+
+.tier-legendary {
+    color: var(--tier-legendary);
+    font-weight: bold;
+    text-shadow: 0 0 6px rgba(85, 255, 255, 0.4);
+}
+
+.tier-rare {
+    color: var(--tier-rare);
+    font-weight: 500;
+}
+
+.tier-unique {
+    color: var(--tier-unique);
+    font-weight: 500;
+}
+
+.tier-set {
+    color: var(--tier-set);
+    font-weight: bold;
+    text-shadow: 0 0 6px rgba(85, 255, 85, 0.3);
+}
+
+.tier-normal {
+    color: var(--tier-normal);
+}
+
+.tier-crafted {
+    color: var(--tier-crafted);
+    font-weight: bold;
+}
+
+.tier-custom {
+    color: var(--tier-custom);
+    font-weight: bold;
+}
+
+/* Elemental Classes */
+.elem-neutral { color: var(--elem-neutral); font-weight: 600; }
+.elem-earth   { color: var(--elem-earth); font-weight: 600; }
+.elem-thunder { color: var(--elem-thunder); font-weight: 600; }
+.elem-water   { color: var(--elem-water); font-weight: 600; }
+.elem-fire    { color: var(--elem-fire); font-weight: 600; }
+.elem-air     { color: var(--elem-air); font-weight: 600; }
+
+/* Tables & Boxes */
+.term-box {
+    border: 1px solid var(--term-border);
+    background-color: rgba(22, 27, 34, 0.6);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 6px 0;
+    max-width: 900px;
+}
+
+.term-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 4px 0;
+}
+
+.term-table th {
+    text-align: left;
+    color: var(--term-muted);
+    border-bottom: 1px solid var(--term-border);
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.term-table td {
+    padding: 4px 10px;
+    font-size: 13px;
+}
+
+.term-table tr:hover {
+    background-color: rgba(56, 139, 253, 0.05);
+}
+
+/* Prompt Line */
+.term-input-container {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    background-color: #0b0f14;
+    border-top: 1px solid var(--term-border);
+    flex-shrink: 0;
+}
+
+.term-prompt-prefix {
+    color: var(--term-prompt);
+    font-weight: bold;
+    margin-right: 8px;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.term-input {
+    flex-grow: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #f0f6fc;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 0;
+    margin: 0;
+}
+
+.term-input::placeholder {
+    color: #484f58;
+}
+
+/* Auto-completion list / hints */
+.term-completions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 8px;
+    background-color: rgba(33, 38, 45, 0.8);
+    border: 1px solid var(--term-border);
+    border-radius: 4px;
+    margin: 4px 0;
+    font-size: 12px;
+}
+
+.term-completion-item {
+    color: var(--term-fg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: #161b22;
+}
+
+/* Backing GUI elements container */
+#builder-backend {
+    display: none !important;
+}
+
+/* When GUI mode is active */
+body.gui-active {
+    overflow: auto;
+}
+
+body.gui-active #terminal-view {
+    display: none !important;
+}
+
+body.gui-active #builder-backend {
+    display: block !important;
+}
+
+/* Ability Tree CLI Styles */
+.atree-status-active {
+    color: #3fb950;
+    font-weight: 600;
+}
+
+.atree-status-takable {
+    color: #58a6ff;
+    font-weight: 600;
+}
+
+.atree-status-locked {
+    color: #6e7681;
+}
+
+.atree-arch-badge {
+    color: #f0883e;
+    background: rgba(240, 136, 62, 0.12);
+    border: 1px solid rgba(240, 136, 62, 0.3);
+    border-radius: 3px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.atree-cost-badge {
+    color: #d29922;
+    font-weight: 600;
+}
+
