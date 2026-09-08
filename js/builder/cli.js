@@ -29,16 +29,23 @@
         "ring1", "ring2", "bracelet", "necklace", "weapon"
     ];
 
+    const VALID_EQUIP_SLOTS = [
+        "helmet", "chestplate", "leggings", "boots",
+        "ring1", "ring2", "ring", "bracelet", "necklace", "weapon"
+    ];
+
     const SLOT_ALIASES = {
         "h": "helmet", "helm": "helmet", "helmet": "helmet",
         "c": "chestplate", "chest": "chestplate", "chestplate": "chestplate",
         "l": "leggings", "legs": "leggings", "leggings": "leggings",
         "b": "boots", "boot": "boots", "boots": "boots",
+        "r": "ring", "ring": "ring", "rings": "ring",
         "r1": "ring1", "ring1": "ring1",
         "r2": "ring2", "ring2": "ring2",
         "br": "bracelet", "brace": "bracelet", "bracelet": "bracelet",
         "n": "necklace", "neck": "necklace", "necklace": "necklace",
-        "w": "weapon", "wep": "weapon", "weapon": "weapon"
+        "w": "weapon", "wep": "weapon", "weapon": "weapon",
+        "wand": "weapon", "bow": "weapon", "dagger": "weapon", "spear": "weapon", "relik": "weapon"
     };
 
     /**
@@ -202,8 +209,8 @@
 
         const cmd = tokens[0].toLowerCase();
 
-        // Completing slots for equip / unequip / powder
-        if ((cmd === "equip" || cmd === "eq" || cmd === "unequip" || cmd === "uneq" || cmd === "powder") && tokens.length === 2) {
+        // Completing slots for unequip / powder
+        if ((cmd === "unequip" || cmd === "uneq" || cmd === "powder") && tokens.length === 2) {
             const prefix = tokens[1].toLowerCase();
             const matches = SLOTS.filter(s => s.startsWith(prefix));
             if (matches.length === 1) {
@@ -214,12 +221,34 @@
             return;
         }
 
-        // Completing item names for equip or item lookup
-        if ((cmd === "equip" || cmd === "eq") && tokens.length >= 3) {
-            const slotArg = tokens[1].toLowerCase();
-            const slot = SLOT_ALIASES[slotArg] || slotArg;
-            const itemPrefix = tokens.slice(2).join(" ").toLowerCase();
-            
+        // Completing slots or item names for equip
+        if ((cmd === "equip" || cmd === "eq") && tokens.length >= 2) {
+            let slot = null;
+            let itemPrefix = "";
+
+            if (tokens.length === 2) {
+                const prefix = tokens[1].toLowerCase();
+                const slotMatches = SLOTS.filter(s => s.startsWith(prefix));
+                if (slotMatches.length === 1) {
+                    inputElem.value = `${tokens[0]} ${slotMatches[0]} `;
+                    return;
+                } else if (slotMatches.length > 1) {
+                    printLine(slotMatches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+                    return;
+                }
+                // No slot matched, treat token 1 as item prefix
+                itemPrefix = prefix;
+            } else {
+                const slotArg = tokens[1].toLowerCase();
+                const potentialSlot = SLOT_ALIASES[slotArg] || (VALID_EQUIP_SLOTS.includes(slotArg) ? slotArg : null);
+                if (potentialSlot) {
+                    slot = potentialSlot;
+                    itemPrefix = tokens.slice(2).join(" ").toLowerCase();
+                } else {
+                    itemPrefix = tokens.slice(1).join(" ").toLowerCase();
+                }
+            }
+
             let candidateList = [];
             if (slot === "weapon") {
                 const weaponKeys = ["bow", "spear", "wand", "dagger", "relik"];
@@ -228,15 +257,19 @@
                         candidateList.push(...itemLists.get(wk));
                     }
                 }
-            } else if (typeof itemLists !== "undefined" && itemLists.has(slot.replace(/[0-9]/g, ''))) {
+            } else if (slot && typeof itemLists !== "undefined" && itemLists.has(slot.replace(/[0-9]/g, ''))) {
                 candidateList = itemLists.get(slot.replace(/[0-9]/g, ''));
             } else if (typeof items !== "undefined") {
                 candidateList = items.map(i => i.displayName);
             }
 
-            const matches = candidateList.filter(name => name.toLowerCase().startsWith(itemPrefix) && !name.startsWith("No "));
+            const matches = candidateList.filter(name => name && name.toLowerCase().startsWith(itemPrefix) && !name.startsWith("No "));
             if (matches.length === 1) {
-                inputElem.value = `${tokens[0]} ${tokens[1]} ${matches[0]}`;
+                if (slot) {
+                    inputElem.value = `${tokens[0]} ${tokens[1]} ${matches[0]}`;
+                } else {
+                    inputElem.value = `${tokens[0]} ${matches[0]}`;
+                }
             } else if (matches.length > 1 && matches.length <= 15) {
                 printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
             } else if (matches.length > 15) {
@@ -277,6 +310,60 @@
                 return;
             }
         }
+
+        // Completing search flags and values
+        if ((cmd === "search" || cmd === "find") && tokens.length >= 2) {
+            const current = tokens[tokens.length - 1];
+            const prev = tokens[tokens.length - 2].toLowerCase();
+
+            if (prev === "-t" || prev === "--type") {
+                const types = ["helmet", "chestplate", "leggings", "boots", "ring", "bracelet", "necklace", "wand", "bow", "dagger", "spear", "relik", "armor", "weapon", "accessory"];
+                const matches = types.filter(t => t.startsWith(current.toLowerCase()));
+                if (matches.length === 1) {
+                    tokens[tokens.length - 1] = matches[0];
+                    inputElem.value = tokens.join(" ") + " ";
+                } else if (matches.length > 1) {
+                    printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+                }
+                return;
+            }
+
+            if (prev === "-r" || prev === "--rarity") {
+                const rarities = ["mythic", "fabled", "legendary", "rare", "set", "unique", "normal"];
+                const matches = rarities.filter(r => r.startsWith(current.toLowerCase()));
+                if (matches.length === 1) {
+                    tokens[tokens.length - 1] = matches[0];
+                    inputElem.value = tokens.join(" ") + " ";
+                } else if (matches.length > 1) {
+                    printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+                }
+                return;
+            }
+
+            if (prev === "-sort" || prev === "--sort") {
+                const sortKeys = ["lvl", "wDam", "eDam", "tDam", "fDam", "aDam", "nDam", "mr", "ms", "spd", "sdPct", "mdPct", "hp", "slots", "strReq", "dexReq", "intReq", "defReq", "agiReq"];
+                const matches = sortKeys.filter(k => k.toLowerCase().startsWith(current.toLowerCase()));
+                if (matches.length === 1) {
+                    tokens[tokens.length - 1] = matches[0];
+                    inputElem.value = tokens.join(" ") + " ";
+                } else if (matches.length > 1) {
+                    printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+                }
+                return;
+            }
+
+            if (current.startsWith("-")) {
+                const flags = ["-t", "-r", "-lvl", "-sort", "-n", "-f"];
+                const matches = flags.filter(f => f.startsWith(current.toLowerCase()));
+                if (matches.length === 1) {
+                    tokens[tokens.length - 1] = matches[0];
+                    inputElem.value = tokens.join(" ") + " ";
+                } else if (matches.length > 1) {
+                    printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+                }
+                return;
+            }
+        }
     }
 
     /**
@@ -294,7 +381,14 @@
             return;
         }
 
-        const parts = cmdStr.trim().split(/\s+/);
+        const parts = [];
+        const regex = /[^\s"]+|"([^"]*)"/g;
+        let match;
+        while ((match = regex.exec(cmdStr.trim())) !== null) {
+            parts.push(match[1] !== undefined ? match[1] : match[0]);
+        }
+        if (parts.length === 0) return;
+
         const command = parts[0].toLowerCase();
         const args = parts.slice(1);
 
@@ -411,7 +505,7 @@
             const helps = {
                 "build": "Usage: build\nDisplays currently equipped gear, powders, skill points, set bonuses, and warnings.",
                 "atree": "Usage: atree [summary | takable | list [filter] | toggle <name|id> | info <name|id> | reset]\nSubcommands:\n  atree                     Show ability tree summary (AP, archetypes, active/takable count)\n  atree takable             List ONLY the abilities currently takable based on your tree\n  atree list [filter]       List all class abilities (filter by: active, takable, archetype, text)\n  atree toggle <name|id>    Activate or deactivate an ability node (e.g. atree toggle Spin Attack)\n  atree take <name|id>      Activate an ability node\n  atree remove <name|id>    Deactivate an ability node\n  atree info <name|id>      Inspect ability details, AP cost, parent/child nodes, and requirements\n  atree reset               Clear/deactivate all ability tree nodes",
-                "equip": "Usage: equip <slot> <item name> [powders]\nExample: equip helmet Morph-Stardust\nExample: equip weapon Cataclysm t6t6t6\nSlots: helmet, chestplate, leggings, boots, ring1, ring2, bracelet, necklace, weapon",
+                "equip": "Usage: equip [slot] <item name> [powders]\nCategory is optional and automatically inferred from item name if omitted!\nExample: equip Morph-Stardust\nExample: equip Cataclysm t6t6t6\nExample: equip helmet Morph-Stardust\nExample: equip weapon Cataclysm -p t6t6t6\nSlots: helmet, chestplate, leggings, boots, ring1, ring2, ring, bracelet, necklace, weapon (or wand, bow, dagger, spear, relik)",
                 "unequip": "Usage: unequip <slot | all>\nExample: unequip helmet\nExample: unequip all",
                 "powder": "Usage: powder <slot> <powders>\nExample: powder weapon e6e6e6\nExample: powder chestplate w6w6",
                 "level": "Usage: level <1-121>\nSets the character level and updates available skill points.",
@@ -419,7 +513,7 @@
                 "stats": "Usage: stats [-d | --detailed]\nDisplays Health, Effective HP, Defenses, Mana regen/steal, and other build IDs.",
                 "damage": "Usage: damage\nDisplays weapon damages, melee DPS, ability spell damages, and poison DPS.",
                 "item": "Usage: item <item name>\nInspects full stats, rolls, requirements, and major IDs of any item in the database.",
-                "search": "Usage: search <name> [-t <type>] [-r <rarity>] [-lvl <min-max>]\nExample: search morph\nExample: search -t dagger -r mythic\nExample: search -t ring -lvl 90-106",
+                "search": "Usage: search [query] [-t <type>] [-r <rarity>] [-lvl <min-max>] [stat filters] [-sort <stat>] [-n <limit>]\nStat Filters: wDam>0, wDamPct>20, mr>=3, spd>10, slots>=2, strReq<=50, +mr, +wDam\nAliases: water damage > 0, mana regen >= 3, walk speed > 15, spell damage > 100\nExample: search -t wand wDam>0\nExample: search -t wand water damage > 0\nExample: search water damage\nExample: search -t ring mr>=3 spd>10\nExample: search -t dagger -r mythic\nExample: search -t bow -lvl 90-106 -sort wDam -n 10",
                 "boost": "Usage: boost [warscream | totem | fortitude | emboldeningcry | judgement | clear]\nToggles combat damage & defense multipliers.",
                 "optimize": "Usage: optimize\nRuns WynnBuilder's Str/Dex damage optimizer on your remaining unassigned skill points.",
                 "link": "Usage: link\nDisplays the shareable WynnBuilder URL and copies it to your clipboard.",
@@ -439,7 +533,7 @@
   <tr><th style='width: 140px;'>Command</th><th>Description</th></tr>
   <tr><td><b class='term-line-info'>build</b> (b, show)</td><td>Display currently equipped build, skill points, and warnings</td></tr>
   <tr><td><b class='term-line-info'>atree</b> [subcmd]</td><td>Manage Ability Tree (<code>toggle &lt;name|id&gt;</code>, <code>takable</code>, <code>list</code>, <code>info</code>, <code>reset</code>)</td></tr>
-  <tr><td><b class='term-line-info'>equip</b> &lt;slot&gt; &lt;item&gt;</td><td>Equip item to slot (with optional powders, e.g. <code>eq wep Cataclysm t6t6t6</code>)</td></tr>
+  <tr><td><b class='term-line-info'>equip</b> [slot] &lt;item&gt;</td><td>Equip item (category optional, e.g. <code>equip Cataclysm t6t6t6</code> or <code>eq helmet Morph-Stardust</code>)</td></tr>
   <tr><td><b class='term-line-info'>unequip</b> &lt;slot|all&gt;</td><td>Unequip an item or clear all equipment</td></tr>
   <tr><td><b class='term-line-info'>powder</b> &lt;slot&gt; &lt;pow&gt;</td><td>Apply powders to equipment (e.g. <code>powder weapon t6t6t6</code>)</td></tr>
   <tr><td><b class='term-line-info'>level</b> &lt;1-121&gt;</td><td>Set player level (e.g. <code>level 106</code>)</td></tr>
@@ -447,7 +541,7 @@
   <tr><td><b class='term-line-info'>stats</b> [-d]</td><td>Display HP, Effective HP, Defenses, Mana stats, and Roll IDs</td></tr>
   <tr><td><b class='term-line-info'>damage</b> (dps)</td><td>Display Weapon damage, Melee DPS, Spell damages, and Poison</td></tr>
   <tr><td><b class='term-line-info'>item</b> &lt;name&gt;</td><td>Inspect stats, requirements, and identifications of any item</td></tr>
-  <tr><td><b class='term-line-info'>search</b> &lt;query&gt;</td><td>Search items by name, slot (<code>-t</code>), rarity (<code>-r</code>), level (<code>-lvl</code>)</td></tr>
+  <tr><td><b class='term-line-info'>search</b> &lt;query&gt;</td><td>Search items by name, type (<code>-t</code>), rarity (<code>-r</code>), level (<code>-lvl</code>), and stat filters (e.g. <code>wDam&gt;0</code>, <code>mr&gt;=3</code>, <code>water damage &gt; 0</code>)</td></tr>
   <tr><td><b class='term-line-info'>boost</b> [buff]</td><td>View or toggle buffs (Warscream, Totem, Fortitude, Judgement)</td></tr>
   <tr><td><b class='term-line-info'>optimize</b></td><td>Optimize remaining skill points between Str and Dex for max DPS</td></tr>
   <tr><td><b class='term-line-info'>link</b> (export)</td><td>Export shareable WynnBuilder URL and copy to clipboard</td></tr>
@@ -574,8 +668,41 @@
         printLine(out);
     }
 
-    function parseEquipArgs(args, slot) {
-        let rest = args.slice(1);
+    function getSlotFromItem(item) {
+        if (!item) return null;
+        if (item.category === "weapon" || ["bow", "spear", "wand", "dagger", "relik"].includes(item.type)) {
+            return "weapon";
+        }
+        if (item.type === "ring") {
+            const ring1Elem = document.getElementById("ring1-choice");
+            const ring2Elem = document.getElementById("ring2-choice");
+            const r1Empty = !ring1Elem || !ring1Elem.value || ring1Elem.value.startsWith("No ");
+            const r2Empty = !ring2Elem || !ring2Elem.value || ring2Elem.value.startsWith("No ");
+            if (r1Empty) return "ring1";
+            if (r2Empty) return "ring2";
+            return "ring1";
+        }
+        if (["helmet", "chestplate", "leggings", "boots", "bracelet", "necklace"].includes(item.type)) {
+            return item.type;
+        }
+        return null;
+    }
+
+    function resolveRingSlot(slot) {
+        if (slot === "ring") {
+            const ring1Elem = document.getElementById("ring1-choice");
+            const ring2Elem = document.getElementById("ring2-choice");
+            const r1Empty = !ring1Elem || !ring1Elem.value || ring1Elem.value.startsWith("No ");
+            const r2Empty = !ring2Elem || !ring2Elem.value || ring2Elem.value.startsWith("No ");
+            if (r1Empty) return "ring1";
+            if (r2Empty) return "ring2";
+            return "ring1";
+        }
+        return slot;
+    }
+
+    function parseEquipArgs(tokens, slot = null) {
+        let rest = tokens.slice();
         if (rest.length === 0) return { itemName: "", powderStr: "" };
 
         let powderStr = "";
@@ -646,44 +773,86 @@
     }
 
     function cmdEquip(args) {
-        if (args.length < 2) {
-            printLine("Usage: equip &lt;slot&gt; &lt;item name&gt; [powders]", "term-line-warn");
+        if (args.length === 0) {
+            printLine("Usage: equip [slot] &lt;item name&gt; [powders]", "term-line-warn");
+            printLine("Category is optional and automatically inferred from item name if omitted.", "term-line-system");
+            printLine("Example: equip Morph-Stardust", "term-line-system");
+            printLine("Example: equip Cataclysm t6t6t6", "term-line-system");
             printLine("Example: equip helmet Morph-Stardust", "term-line-system");
-            printLine("Example: equip weapon Cataclysm t6t6t6", "term-line-system");
             printLine("Example: equip weapon Cataclysm -p t6t6t6", "term-line-system");
             return;
         }
 
-        const slotArg = args[0].toLowerCase();
-        const slot = SLOT_ALIASES[slotArg] || slotArg;
+        let explicitSlot = null;
+        let itemTokens = [];
+        let categoryInferred = false;
 
-        if (!equipment_fields.includes(slot)) {
-            printLine(`Invalid slot '${escapeHtml(slotArg)}'. Valid slots: ${equipment_fields.join(", ")}`, "term-line-error");
+        const firstLower = args[0].toLowerCase();
+        const potentialSlot = SLOT_ALIASES[firstLower] || (VALID_EQUIP_SLOTS.includes(firstLower) ? firstLower : null);
+
+        if (potentialSlot && args.length >= 2) {
+            // Check if the entire argument string matches an item whose full name starts with args[0]
+            // e.g. "Helm Splitter", "Chest Breaker", "Ring of Fire", "Bow of Wisdom"
+            const fullParse = parseEquipArgs(args);
+            const fullMatch = fullParse.itemName ? resolveItemExactOrCase(fullParse.itemName) : null;
+
+            if (fullMatch && fullMatch.displayName.toLowerCase().startsWith(firstLower)) {
+                explicitSlot = null;
+                itemTokens = args;
+                categoryInferred = true;
+            } else {
+                explicitSlot = potentialSlot;
+                itemTokens = args.slice(1);
+            }
+        } else if (potentialSlot && args.length === 1) {
+            printLine(`Item name cannot be empty. Usage: equip ${args[0]} &lt;item name&gt; [powders]`, "term-line-warn");
             return;
+        } else {
+            explicitSlot = null;
+            itemTokens = args;
+            categoryInferred = true;
         }
 
-        const { itemName, powderStr } = parseEquipArgs(args, slot);
+        const { itemName, powderStr } = parseEquipArgs(itemTokens, explicitSlot);
         if (!itemName) {
             printLine("Item name cannot be empty.", "term-line-warn");
             return;
         }
 
         // Find best match in itemMap
-        const matchedItem = resolveItem(itemName, slot);
+        const matchedItem = resolveItem(itemName, explicitSlot);
         if (!matchedItem) {
             printLine(`Item '${escapeHtml(itemName)}' not found in database.`, "term-line-error");
             return;
         }
 
+        // Determine target slot
+        let targetSlot = explicitSlot;
+        if (!targetSlot) {
+            targetSlot = getSlotFromItem(matchedItem);
+            if (!targetSlot) {
+                printLine(`Could not infer equipment slot for item '${escapeHtml(matchedItem.displayName)}'.`, "term-line-error");
+                return;
+            }
+        }
+
+        // If slot is "ring", choose between ring1 and ring2
+        targetSlot = resolveRingSlot(targetSlot);
+
+        if (!equipment_fields.includes(targetSlot)) {
+            printLine(`Invalid slot '${escapeHtml(targetSlot)}'. Valid slots: ${equipment_fields.join(", ")}`, "term-line-error");
+            return;
+        }
+
         // Update DOM input to trigger the computation graph
-        const choiceInput = document.getElementById(slot + "-choice");
+        const choiceInput = document.getElementById(targetSlot + "-choice");
         if (choiceInput) {
             choiceInput.value = matchedItem.displayName;
             choiceInput.dispatchEvent(new Event("change"));
         }
 
         // Apply powders if provided or clear previous powders if slot supports powders
-        const powderInputId = slot + "-powder";
+        const powderInputId = targetSlot + "-powder";
         if (powder_inputs.includes(powderInputId)) {
             const powderInput = document.getElementById(powderInputId);
             if (powderInput) {
@@ -707,11 +876,11 @@
                 }
             }
         } else if (powderStr) {
-            printLine(`Note: Slot <b>${slot}</b> does not support powders.`, "term-line-system");
+            printLine(`Note: Slot <b>${targetSlot}</b> does not support powders.`, "term-line-system");
         }
 
         const tierClass = getTierClass(matchedItem.tier);
-        let msg = `Equipped <span class='${tierClass}'>[${escapeHtml(matchedItem.displayName)}]</span> to <b>${slot}</b>.`;
+        let msg = `Equipped <span class='${tierClass}'>[${escapeHtml(matchedItem.displayName)}]</span> to <b>${targetSlot}</b>${categoryInferred ? ` (category inferred: <b>${matchedItem.type}</b>)` : ""}.`;
         if (powderStr) msg += ` Powders: [<span class='elem-neutral'>${escapeHtml(powderStr)}</span>]`;
         printLine(msg, "term-line-success");
 
@@ -1117,12 +1286,13 @@
 
         if (maxRolls && maxRolls.size > 0) {
             out += "<div style='margin-top: 6px;'><b>Identifications:</b><table class='term-table'>";
-            out += "<tr><th>Identification</th><th>Range [Min to Max]</th><th>Base</th></tr>";
+            out += "<tr><th>Identification</th><th>Range [Min to Max]</th></tr>";
             for (const [id, maxVal] of maxRolls.entries()) {
                 const minVal = minRolls.get(id);
                 const prefix = idPrefixes[id] || id;
-                const baseVal = statMap.get(id) || 0;
-                out += `<tr><td>${prefix}</td><td>${minVal} to ${maxVal}</td><td><b>${baseVal}</b></td></tr>`;
+                const baseVal = statMap.get(id) || 0; // Unused atm
+                if(minVal === 0 && maxVal === 0 && baseVal === 0) continue;
+                out += `<tr><td>${prefix}</td><td>${minVal} to ${maxVal}</td></tr>`;
             }
             out += "</table></div>";
         }
@@ -1145,69 +1315,557 @@
         printLine(out);
     }
 
+    const SEARCH_TYPE_ALIASES = {
+        "h": "helmet", "helm": "helmet", "helmet": "helmet",
+        "c": "chestplate", "chest": "chestplate", "chestplate": "chestplate",
+        "l": "leggings", "legs": "leggings", "leggings": "leggings",
+        "b": "boots", "boot": "boots", "boots": "boots",
+        "r": "ring", "ring": "ring", "rings": "ring", "r1": "ring", "r2": "ring",
+        "br": "bracelet", "brace": "bracelet", "bracelet": "bracelet",
+        "n": "necklace", "neck": "necklace", "necklace": "necklace",
+        "w": "weapon", "wep": "weapon", "weapon": "weapon",
+        "wand": "wand", "bow": "bow", "dagger": "dagger", "spear": "spear", "relik": "relik",
+        "armor": "armor", "accessory": "accessory", "acc": "accessory"
+    };
+
+    const STAT_ALIASES = {
+        "wdam": "wDam", "waterdamage": "wDam", "waterdam": "wDam", "wdmg": "wDam", "water": "wDam",
+        "wdampct": "wDamPct", "waterdampct": "wDamPct", "waterdamagepct": "wDamPct", "water%": "wDamPct", "waterdmg%": "wDamPct",
+        "wdamraw": "wDamRaw", "waterdamraw": "wDamRaw", "waterdamageraw": "wDamRaw", "wdmgraw": "wDamRaw",
+        "wbase": "wBase", "wbasedam": "wBase", "wbasedamage": "wBase",
+        "wsdpct": "wSdPct", "waterspelldamage%": "wSdPct", "waterspelldamagepct": "wSdPct",
+        "wsdraw": "wSdRaw", "waterspelldamageraw": "wSdRaw",
+        "wmdpct": "wMdPct", "watermeleedamage%": "wMdPct", "watermeleedamagepct": "wMdPct",
+        "wmdraw": "wMdRaw", "watermeleedamageraw": "wMdRaw",
+        "wdef": "wDef", "waterdefense": "wDef", "waterdef": "wDef",
+        "wdefpct": "wDefPct", "waterdefense%": "wDefPct", "waterdef%": "wDefPct",
+
+        "edam": "eDam", "earthdamage": "eDam", "earthdam": "eDam", "edmg": "eDam", "earth": "eDam",
+        "edampct": "eDamPct", "earthdampct": "eDamPct", "earthdamagepct": "eDamPct", "earth%": "eDamPct",
+        "edamraw": "eDamRaw", "earthdamraw": "eDamRaw", "earthdamageraw": "eDamRaw",
+        "ebase": "eBase", "esdpct": "eSdPct", "esdraw": "eSdRaw", "emdpct": "eMdPct", "emdraw": "eMdRaw",
+        "edef": "eDef", "edefpct": "eDefPct",
+
+        "tdam": "tDam", "thunderdamage": "tDam", "thunderdam": "tDam", "tdmg": "tDam", "thunder": "tDam",
+        "tdampct": "tDamPct", "thunderdampct": "tDamPct", "thunderdamagepct": "tDamPct", "thunder%": "tDamPct",
+        "tdamraw": "tDamRaw", "thunderdamraw": "tDamRaw", "thunderdamageraw": "tDamRaw",
+        "tbase": "tBase", "tsdpct": "tSdPct", "tsdraw": "tSdRaw", "tmdpct": "tMdPct", "tmdraw": "tMdRaw",
+        "tdef": "tDef", "tdefpct": "tDefPct",
+
+        "fdam": "fDam", "firedamage": "fDam", "firedam": "fDam", "fdmg": "fDam", "fire": "fDam",
+        "fdampct": "fDamPct", "firedampct": "fDamPct", "firedamagepct": "fDamPct", "fire%": "fDamPct",
+        "fdamraw": "fDamRaw", "firedamraw": "fDamRaw", "firedamageraw": "fDamRaw",
+        "fbase": "fBase", "fsdpct": "fSdPct", "fsdraw": "fSdRaw", "fmdpct": "fMdPct", "fmdraw": "fMdRaw",
+        "fdef": "fDef", "fdefpct": "fDefPct",
+
+        "adam": "aDam", "airdamage": "aDam", "airdam": "aDam", "admg": "aDam", "air": "aDam",
+        "adampct": "aDamPct", "airdampct": "aDamPct", "airdamagepct": "aDamPct", "air%": "aDamPct",
+        "adamraw": "aDamRaw", "airdamraw": "aDamRaw", "airdamageraw": "aDamRaw",
+        "abase": "aBase", "asdpct": "aSdPct", "asdraw": "aSdRaw", "amdpct": "aMdPct", "amdraw": "aMdRaw",
+        "adef": "aDef", "adefpct": "aDefPct",
+
+        "ndam": "nDam", "neutraldamage": "nDam", "neutraldam": "nDam", "neutral": "nDam",
+        "ndampct": "nDamPct", "ndamraw": "nDamRaw", "nbase": "nBase",
+        "nsdpct": "nSdPct", "nsdraw": "nSdRaw", "nmdpct": "nMdPct", "nmdraw": "nMdRaw",
+
+        "dampct": "damPct", "damage%": "damPct", "dmg%": "damPct",
+        "damraw": "damRaw", "damageraw": "damRaw",
+        "rdampct": "rDamPct", "elemdamage%": "rDamPct", "rdamraw": "rDamRaw",
+        "sdpct": "sdPct", "spelldamage%": "sdPct", "spelldmg%": "sdPct", "sd": "sdPct",
+        "sdraw": "sdRaw", "rawspelldamage": "sdRaw",
+        "mdpct": "mdPct", "meleedamage%": "mdPct", "meleedmg%": "mdPct", "md": "mdPct",
+        "mdraw": "mdRaw", "rawmeleedamage": "mdRaw",
+        "crit": "critDamPct", "critdampct": "critDamPct", "critdamage": "critDamPct",
+
+        "hp": "hp", "health": "hp", "hpbonus": "hpBonus", "healthbonus": "hpBonus",
+        "mr": "mr", "manaregen": "mr", "ms": "ms", "manasteal": "ms",
+        "hpr": "hprRaw", "hprraw": "hprRaw", "healthregen": "hprRaw", "rawhealthregen": "hprRaw",
+        "hprpct": "hprPct", "healthregen%": "hprPct",
+        "ls": "ls", "lifesteal": "ls", "healpct": "healPct", "healing": "healPct",
+
+        "spd": "spd", "speed": "spd", "walkspeed": "spd",
+        "poison": "poison", "thorns": "thorns", "ref": "ref", "reflection": "ref",
+        "expd": "expd", "exploding": "expd",
+        "atktier": "atkTier", "attackspeed": "atkTier", "atkspd": "atkTier",
+        "slots": "slots", "powderslots": "slots",
+        "xpb": "xpb", "xp": "xpb", "lb": "lb", "loot": "lb", "lootbonus": "lb", "lq": "lq", "lootquality": "lq",
+        "sprint": "sprint", "sprintreg": "sprintReg", "jh": "jh", "jumpheight": "jh",
+
+        "str": "str", "dex": "dex", "int": "int", "def": "def", "agi": "agi",
+        "strreq": "strReq", "dexreq": "dexReq", "intreq": "intReq", "defreq": "defReq", "agireq": "agiReq",
+        "lvl": "lvl", "level": "lvl",
+        "major": "majorIds", "majorid": "majorIds", "mid": "majorIds", "majorids": "majorIds",
+        "set": "set", "class": "classReq", "classreq": "classReq"
+    };
+
+    const STAT_DISPLAY_NAMES = {
+        "wDam": "Water Dam", "wDamPct": "Water Dam %", "wDamRaw": "Water Dam Raw", "wBase": "Water Base",
+        "wSdPct": "Water Spell %", "wMdPct": "Water Melee %", "wDef": "Water Def", "wDefPct": "Water Def %",
+        "eDam": "Earth Dam", "eDamPct": "Earth Dam %", "eDamRaw": "Earth Dam Raw", "eBase": "Earth Base",
+        "eSdPct": "Earth Spell %", "eMdPct": "Earth Melee %", "eDef": "Earth Def", "eDefPct": "Earth Def %",
+        "tDam": "Thunder Dam", "tDamPct": "Thunder Dam %", "tDamRaw": "Thunder Dam Raw", "tBase": "Thunder Base",
+        "tSdPct": "Thunder Spell %", "tMdPct": "Thunder Melee %", "tDef": "Thunder Def", "tDefPct": "Thunder Def %",
+        "fDam": "Fire Dam", "fDamPct": "Fire Dam %", "fDamRaw": "Fire Dam Raw", "fBase": "Fire Base",
+        "fSdPct": "Fire Spell %", "fMdPct": "Fire Melee %", "fDef": "Fire Def", "fDefPct": "Fire Def %",
+        "aDam": "Air Dam", "aDamPct": "Air Dam %", "aDamRaw": "Air Dam Raw", "aBase": "Air Base",
+        "aSdPct": "Air Spell %", "aMdPct": "Air Melee %", "aDef": "Air Def", "aDefPct": "Air Def %",
+        "nDam": "Neutral Dam", "nDamPct": "Neutral Dam %", "nDamRaw": "Neutral Dam Raw", "nBase": "Neutral Base",
+        "damPct": "Damage %", "damRaw": "Damage Raw", "rDamPct": "Elem Dam %", "rDamRaw": "Elem Dam Raw",
+        "sdPct": "Spell Dam %", "sdRaw": "Spell Dam Raw", "mdPct": "Melee Dam %", "mdRaw": "Melee Dam Raw",
+        "critDamPct": "Crit Dam %",
+        "hp": "Health", "hpBonus": "Health Bonus", "mr": "Mana Regen", "ms": "Mana Steal",
+        "hprRaw": "Health Regen", "hprPct": "Health Regen %", "ls": "Life Steal", "healPct": "Healing %",
+        "spd": "Walk Speed", "poison": "Poison", "thorns": "Thorns", "ref": "Reflection",
+        "expd": "Exploding", "atkTier": "Attack Speed", "slots": "Slots",
+        "xpb": "XP Bonus", "lb": "Loot Bonus", "lq": "Loot Quality",
+        "str": "Strength", "dex": "Dexterity", "int": "Intelligence", "def": "Defense", "agi": "Agility",
+        "strReq": "Str Req", "dexReq": "Dex Req", "intReq": "Int Req", "defReq": "Def Req", "agiReq": "Agi Req",
+        "lvl": "Level", "majorIds": "Major ID"
+    };
+
+    const STAT_HEADER_CLASSES = {
+        "wDam": "elem-water", "wDamPct": "elem-water", "wDamRaw": "elem-water", "wDef": "elem-water", "wDefPct": "elem-water", "wBase": "elem-water", "wSdPct": "elem-water", "wMdPct": "elem-water",
+        "eDam": "elem-earth", "eDamPct": "elem-earth", "eDamRaw": "elem-earth", "eDef": "elem-earth", "eDefPct": "elem-earth", "eBase": "elem-earth", "eSdPct": "elem-earth", "eMdPct": "elem-earth",
+        "tDam": "elem-thunder", "tDamPct": "elem-thunder", "tDamRaw": "elem-thunder", "tDef": "elem-thunder", "tDefPct": "elem-thunder", "tBase": "elem-thunder", "tSdPct": "elem-thunder", "tMdPct": "elem-thunder",
+        "fDam": "elem-fire", "fDamPct": "elem-fire", "fDamRaw": "elem-fire", "fDef": "elem-fire", "fDefPct": "elem-fire", "fBase": "elem-fire", "fSdPct": "elem-fire", "fMdPct": "elem-fire",
+        "aDam": "elem-air", "aDamPct": "elem-air", "aDamRaw": "elem-air", "aDef": "elem-air", "aDefPct": "elem-air", "aBase": "elem-air", "aSdPct": "elem-air", "aMdPct": "elem-air",
+        "nDam": "elem-neutral", "nDamPct": "elem-neutral", "nDamRaw": "elem-neutral"
+    };
+
+    function parseDamageRangeMax(str) {
+        if (!str || typeof str !== "string") return 0;
+        const parts = str.split("-").map(Number);
+        return isNaN(parts[1]) ? (isNaN(parts[0]) ? 0 : parts[0]) : parts[1];
+    }
+
+    function parseDamageRangeAvg(str) {
+        if (!str || typeof str !== "string") return 0;
+        const parts = str.split("-").map(Number);
+        if (!isNaN(parts[0]) && !isNaN(parts[1])) return (parts[0] + parts[1]) / 2;
+        return isNaN(parts[0]) ? 0 : parts[0];
+    }
+
+    function getItemStatValue(item, canonicalKey) {
+        switch (canonicalKey) {
+            case "wDam": {
+                const base = parseDamageRangeMax(item.wDam);
+                const pct = item.wDamPct || 0;
+                const raw = item.wDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "eDam": {
+                const base = parseDamageRangeMax(item.eDam);
+                const pct = item.eDamPct || 0;
+                const raw = item.eDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "tDam": {
+                const base = parseDamageRangeMax(item.tDam);
+                const pct = item.tDamPct || 0;
+                const raw = item.tDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "fDam": {
+                const base = parseDamageRangeMax(item.fDam);
+                const pct = item.fDamPct || 0;
+                const raw = item.fDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "aDam": {
+                const base = parseDamageRangeMax(item.aDam);
+                const pct = item.aDamPct || 0;
+                const raw = item.aDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "nDam": {
+                const base = parseDamageRangeMax(item.nDam);
+                const pct = item.nDamPct || 0;
+                const raw = item.nDamRaw || 0;
+                if (base > 0) return base;
+                if (pct !== 0) return pct;
+                return raw;
+            }
+            case "wBase": return parseDamageRangeAvg(item.wDam);
+            case "eBase": return parseDamageRangeAvg(item.eDam);
+            case "tBase": return parseDamageRangeAvg(item.tDam);
+            case "fBase": return parseDamageRangeAvg(item.fDam);
+            case "aBase": return parseDamageRangeAvg(item.aDam);
+            case "nBase": return parseDamageRangeAvg(item.nDam);
+            case "majorIds": return item.majorIds || [];
+            default:
+                return item[canonicalKey] !== undefined ? item[canonicalKey] : 0;
+        }
+    }
+
+    function formatStatDisplay(item, canonicalKey) {
+        if (canonicalKey === "wDam") {
+            let parts = [];
+            if (item.wDam && item.wDam !== "0-0") parts.push(item.wDam);
+            if (item.wDamPct) parts.push(`${item.wDamPct > 0 ? "+" : ""}${item.wDamPct}%`);
+            if (item.wDamRaw) parts.push(`${item.wDamRaw > 0 ? "+" : ""}${item.wDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-water">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "eDam") {
+            let parts = [];
+            if (item.eDam && item.eDam !== "0-0") parts.push(item.eDam);
+            if (item.eDamPct) parts.push(`${item.eDamPct > 0 ? "+" : ""}${item.eDamPct}%`);
+            if (item.eDamRaw) parts.push(`${item.eDamRaw > 0 ? "+" : ""}${item.eDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-earth">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "tDam") {
+            let parts = [];
+            if (item.tDam && item.tDam !== "0-0") parts.push(item.tDam);
+            if (item.tDamPct) parts.push(`${item.tDamPct > 0 ? "+" : ""}${item.tDamPct}%`);
+            if (item.tDamRaw) parts.push(`${item.tDamRaw > 0 ? "+" : ""}${item.tDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-thunder">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "fDam") {
+            let parts = [];
+            if (item.fDam && item.fDam !== "0-0") parts.push(item.fDam);
+            if (item.fDamPct) parts.push(`${item.fDamPct > 0 ? "+" : ""}${item.fDamPct}%`);
+            if (item.fDamRaw) parts.push(`${item.fDamRaw > 0 ? "+" : ""}${item.fDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-fire">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "aDam") {
+            let parts = [];
+            if (item.aDam && item.aDam !== "0-0") parts.push(item.aDam);
+            if (item.aDamPct) parts.push(`${item.aDamPct > 0 ? "+" : ""}${item.aDamPct}%`);
+            if (item.aDamRaw) parts.push(`${item.aDamRaw > 0 ? "+" : ""}${item.aDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-air">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "nDam") {
+            let parts = [];
+            if (item.nDam && item.nDam !== "0-0") parts.push(item.nDam);
+            if (item.nDamPct) parts.push(`${item.nDamPct > 0 ? "+" : ""}${item.nDamPct}%`);
+            if (item.nDamRaw) parts.push(`${item.nDamRaw > 0 ? "+" : ""}${item.nDamRaw}`);
+            return parts.length > 0 ? `<span class="elem-neutral">${parts.join(" ")}</span>` : "-";
+        }
+        if (canonicalKey === "majorIds") {
+            return (item.majorIds && item.majorIds.length > 0) ? `<b class="tier-legendary">${escapeHtml(item.majorIds.join(", "))}</b>` : "-";
+        }
+
+        const val = item[canonicalKey];
+        if (val === undefined || val === 0 || val === "0-0") return "-";
+
+        const cssClass = STAT_HEADER_CLASSES[canonicalKey] || "";
+        let valStr = "";
+        if (canonicalKey.endsWith("Pct") || canonicalKey === "spd" || canonicalKey === "thorns" || canonicalKey === "ref" || canonicalKey === "expd" || canonicalKey === "xpb" || canonicalKey === "lb" || canonicalKey === "lq" || canonicalKey === "healPct") {
+            valStr = `${val > 0 ? "+" : ""}${val}%`;
+        } else if (canonicalKey === "mr") {
+            valStr = `${val > 0 ? "+" : ""}${val}/5s`;
+        } else if (canonicalKey === "ms" || canonicalKey === "ls" || canonicalKey === "poison") {
+            valStr = `${val > 0 ? "+" : ""}${val}/3s`;
+        } else if (typeof val === "number") {
+            const noPlus = ["slots", "lvl", "strReq", "dexReq", "intReq", "defReq", "agiReq"];
+            valStr = noPlus.includes(canonicalKey) ? String(val) : `${val > 0 ? "+" : ""}${val}`;
+        } else {
+            valStr = String(val);
+        }
+
+        return cssClass ? `<span class="${cssClass}">${valStr}</span>` : valStr;
+    }
+
+    function evaluateFilter(item, filter) {
+        const { canonical, op, numVal, rawVal } = filter;
+
+        if (canonical === "majorIds") {
+            const majors = item.majorIds || [];
+            const target = rawVal.toLowerCase();
+            return majors.some(m => m.toLowerCase().includes(target));
+        }
+
+        if (canonical === "tier") {
+            const t = (item.tier || "").toLowerCase();
+            if (op === "!=" || op === "!==") return t !== rawVal.toLowerCase();
+            return t === rawVal.toLowerCase();
+        }
+
+        if (canonical === "type") {
+            const target = SEARCH_TYPE_ALIASES[rawVal.toLowerCase()] || rawVal.toLowerCase();
+            return item.type === target || item.category === target;
+        }
+
+        if (canonical === "set") {
+            const s = (item.set || "").toLowerCase();
+            return s.includes(rawVal.toLowerCase());
+        }
+
+        if (canonical === "classReq") {
+            const c = (item.classReq || "").toLowerCase();
+            return c.includes(rawVal.toLowerCase());
+        }
+
+        const actual = getItemStatValue(item, canonical);
+
+        if (op === ":") {
+            const parts = rawVal.split("-").map(Number);
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                return actual >= parts[0] && actual <= parts[1];
+            }
+            return actual === numVal;
+        }
+
+        if (isNaN(numVal)) return false;
+
+        switch (op) {
+            case ">": return actual > numVal;
+            case ">=": return actual >= numVal;
+            case "<": return actual < numVal;
+            case "<=": return actual <= numVal;
+            case "=":
+            case "==": return actual === numVal;
+            case "!=":
+            case "!==": return actual !== numVal;
+            default: return actual > 0;
+        }
+    }
+
     function cmdSearch(args) {
         if (args.length === 0) {
-            printLine("Usage: search &lt;query&gt; [-t &lt;type&gt;] [-r &lt;rarity&gt;] [-lvl &lt;min-max&gt;]", "term-line-warn");
-            printLine("Example: search dagger -r mythic", "term-line-system");
-            printLine("Example: search morph -t ring", "term-line-system");
+            let help = "<div class='term-box'><b>Usage:</b> <code>search &lt;query&gt; [-t &lt;type&gt;] [-r &lt;rarity&gt;] [-lvl &lt;min-max&gt;] [stat filters] [-sort &lt;stat&gt;] [-n &lt;limit&gt;]</code><br/><br/>";
+            help += "<b>Examples:</b><br/>";
+            help += "&nbsp;&nbsp;<code>search -t wand wDam&gt;0</code> (all wands with positive water damage)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t wand water damage &gt; 0</code><br/>";
+            help += "&nbsp;&nbsp;<code>search water damage</code> (all items with positive water damage)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t ring mr&gt;=3 spd&gt;10</code> (rings with ≥3 MR and &gt;10% speed)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t dagger -r mythic</code><br/>";
+            help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort wDam -n 10</code><br/><br/>";
+            help += "<b>Supported Stat Filters:</b><br/>";
+            help += "&nbsp;&nbsp;• <b>Elements:</b> <code>wDam</code> (water), <code>eDam</code> (earth), <code>tDam</code> (thunder), <code>fDam</code> (fire), <code>aDam</code> (air), <code>nDam</code> (neutral)<br/>";
+            help += "&nbsp;&nbsp;• <b>Sub-stats:</b> <code>wDamPct</code>, <code>wDamRaw</code>, <code>wBase</code>, <code>wSdPct</code>, <code>wMdPct</code>, <code>wDef</code>, <code>wDefPct</code><br/>";
+            help += "&nbsp;&nbsp;• <b>General:</b> <code>mr</code> (mana regen), <code>ms</code> (mana steal), <code>spd</code> (speed), <code>sdPct</code> (spell dam %), <code>mdPct</code> (melee dam %)<br/>";
+            help += "&nbsp;&nbsp;• <b>Sustain/Utility:</b> <code>hp</code>, <code>hpr</code> (health regen), <code>ls</code> (life steal), <code>poison</code>, <code>slots</code>, <code>strReq</code>, <code>dexReq</code>, etc.<br/>";
+            help += "&nbsp;&nbsp;• <b>Operators:</b> <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>, <code>!=</code><br/>";
+            help += "&nbsp;&nbsp;• <b>Shorthand:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code> (equivalent to <code>&gt;0</code>)</div>";
+            printLine(help);
             return;
+        }
+
+        // Normalize adjacent operator tokens
+        const rawTokens = args;
+        const tokens = [];
+        for (let i = 0; i < rawTokens.length; i++) {
+            const t = rawTokens[i];
+            if (['>', '>=', '<', '<=', '=', '!=', ':'].includes(t)) {
+                const prev = tokens.pop() || '';
+                const next = rawTokens[++i] || '';
+                tokens.push(prev + t + next);
+            } else if (['>', '>=', '<', '<=', '=', '!=', ':'].some(op => t.startsWith(op))) {
+                const prev = tokens.pop() || '';
+                tokens.push(prev + t);
+            } else if (['>', '>=', '<', '<=', '=', '!=', ':'].some(op => t.endsWith(op))) {
+                const next = rawTokens[++i] || '';
+                tokens.push(t + next);
+            } else {
+                tokens.push(t);
+            }
         }
 
         let typeFilter = null;
         let rarityFilter = null;
         let lvlMin = 0;
         let lvlMax = 121;
+        let limit = 25;
+        let sortBy = null;
+        let sortDesc = true;
+        let statFilters = [];
         let queryWords = [];
 
-        for (let i = 0; i < args.length; i++) {
-            if (args[i] === "-t" && i + 1 < args.length) {
-                typeFilter = args[++i].toLowerCase();
-            } else if (args[i] === "-r" && i + 1 < args.length) {
-                rarityFilter = args[++i].toLowerCase();
-            } else if (args[i] === "-lvl" && i + 1 < args.length) {
-                const bounds = args[++i].split("-").map(Number);
+        for (let i = 0; i < tokens.length; i++) {
+            const tok = tokens[i];
+            const tokLower = tok.toLowerCase();
+
+            if ((tokLower === "-t" || tokLower === "--type") && i + 1 < tokens.length) {
+                typeFilter = tokens[++i].toLowerCase();
+            } else if ((tokLower === "-r" || tokLower === "--rarity" || tokLower === "-tier") && i + 1 < tokens.length) {
+                rarityFilter = tokens[++i].toLowerCase();
+            } else if ((tokLower === "-lvl" || tokLower === "--level") && i + 1 < tokens.length) {
+                const bounds = tokens[++i].split("-").map(Number);
                 if (bounds.length === 2 && !isNaN(bounds[0]) && !isNaN(bounds[1])) {
                     lvlMin = bounds[0];
                     lvlMax = bounds[1];
                 }
+            } else if ((tokLower === "-n" || tokLower === "--limit") && i + 1 < tokens.length) {
+                const n = parseInt(tokens[++i], 10);
+                if (!isNaN(n) && n > 0) limit = Math.min(n, 100);
+            } else if ((tokLower === "-sort" || tokLower === "--sort") && i + 1 < tokens.length) {
+                let s = tokens[++i];
+                if (s.startsWith("-")) {
+                    sortDesc = true;
+                    s = s.slice(1);
+                } else if (s.startsWith("+")) {
+                    sortDesc = false;
+                    s = s.slice(1);
+                }
+                const sKey = s.toLowerCase().replace(/[^a-z0-9%]/g, "");
+                sortBy = STAT_ALIASES[sKey] || sKey;
+            } else if ((tokLower === "-f" || tokLower === "--filter") && i + 1 < tokens.length) {
+                const fStr = tokens[++i];
+                const opMatch = fStr.match(/^(.+?)(>=|<=|>|<|!=|=|:)(.+)$/);
+                if (opMatch) {
+                    const k = opMatch[1].trim().toLowerCase().replace(/[^a-z0-9%]/g, "");
+                    const op = opMatch[2];
+                    const v = opMatch[3].trim().replace(/^["']|["']$/g, "");
+                    const canonical = STAT_ALIASES[k] || k;
+                    statFilters.push({ rawKey: k, canonical, op, rawVal: v, numVal: Number(v) });
+                } else {
+                    const k = fStr.trim().toLowerCase().replace(/[^a-z0-9%]/g, "");
+                    const canonical = STAT_ALIASES[k] || k;
+                    statFilters.push({ rawKey: k, canonical, op: ">", rawVal: "0", numVal: 0 });
+                }
             } else {
-                queryWords.push(args[i].toLowerCase());
+                const opMatch = tok.match(/^(.+?)(>=|<=|>|<|!=|=|:)(.+)$/);
+                if (opMatch) {
+                    let k = opMatch[1].trim().toLowerCase().replace(/[^a-z0-9%]/g, "");
+                    const op = opMatch[2];
+                    const v = opMatch[3].trim().replace(/^["']|["']$/g, "");
+
+                    if (queryWords.length > 0) {
+                        const prev = queryWords[queryWords.length - 1];
+                        const combined = prev + k;
+                        if (STAT_ALIASES[combined]) {
+                            k = combined;
+                            queryWords.pop();
+                        }
+                    }
+                    const canonical = STAT_ALIASES[k] || k;
+                    statFilters.push({ rawKey: k, canonical, op, rawVal: v, numVal: Number(v) });
+                } else if (tok.startsWith("+")) {
+                    const k = tok.slice(1).toLowerCase().replace(/[^a-z0-9%]/g, "");
+                    const canonical = STAT_ALIASES[k] || k;
+                    statFilters.push({ rawKey: k, canonical, op: ">", rawVal: "0", numVal: 0 });
+                } else {
+                    queryWords.push(tok.toLowerCase());
+                }
+            }
+        }
+
+        // If query words form a recognized stat alias and no stat filter was set, treat as stat > 0
+        if (statFilters.length === 0 && queryWords.length > 0) {
+            const potentialStat = queryWords.join("").replace(/[^a-z0-9%]/g, "");
+            const isSingleGenericWord = ["water", "earth", "thunder", "fire", "air", "neutral"].includes(potentialStat);
+            if (STAT_ALIASES[potentialStat] && !isSingleGenericWord) {
+                const canonical = STAT_ALIASES[potentialStat];
+                statFilters.push({ rawKey: potentialStat, canonical, op: ">", rawVal: "0", numVal: 0 });
+                queryWords = [];
             }
         }
 
         const queryStr = queryWords.join(" ");
-        let results = [];
+        let matches = [];
 
         for (const item of items) {
             if (!item.displayName || item.displayName.startsWith("No ")) continue;
 
             if (typeFilter) {
-                const slot = SLOT_ALIASES[typeFilter] || typeFilter;
+                const slot = SEARCH_TYPE_ALIASES[typeFilter] || typeFilter;
                 if (item.type !== slot && item.category !== slot) continue;
             }
 
             if (rarityFilter) {
-                if (item.tier.toLowerCase() !== rarityFilter) continue;
+                if (!item.tier || item.tier.toLowerCase() !== rarityFilter) continue;
             }
 
             if (item.lvl < lvlMin || item.lvl > lvlMax) continue;
 
             if (queryStr && !item.displayName.toLowerCase().includes(queryStr)) continue;
 
-            results.push(item);
-            if (results.length >= 25) break;
+            let pass = true;
+            for (const f of statFilters) {
+                if (!evaluateFilter(item, f)) {
+                    pass = false;
+                    break;
+                }
+            }
+            if (!pass) continue;
+
+            matches.push(item);
         }
 
-        if (results.length === 0) {
+        if (matches.length === 0) {
             printLine("No items matching search criteria.", "term-line-warn");
             return;
         }
 
-        let out = `<div class='term-box'><b>Search Results (${results.length}${results.length === 25 ? "+" : ""}):</b><table class='term-table'>`;
-        out += "<tr><th>Name</th><th>Tier</th><th>Type</th><th>Level</th></tr>";
-        for (const it of results) {
+        // Sorting
+        if (sortBy) {
+            matches.sort((a, b) => {
+                const vA = getItemStatValue(a, sortBy);
+                const vB = getItemStatValue(b, sortBy);
+                return sortDesc ? (vB - vA) : (vA - vB);
+            });
+        } else if (statFilters.length > 0) {
+            const primary = statFilters[0].canonical;
+            matches.sort((a, b) => {
+                const vA = getItemStatValue(a, primary);
+                const vB = getItemStatValue(b, primary);
+                if (vB !== vA) return vB - vA;
+                return (b.lvl || 0) - (a.lvl || 0);
+            });
+        } else {
+            matches.sort((a, b) => (b.lvl || 0) - (a.lvl || 0));
+        }
+
+        const displayItems = matches.slice(0, limit);
+
+        // Determine extra columns to display (up to 3 stat columns)
+        const displayStats = [];
+        for (const f of statFilters) {
+            if (!displayStats.includes(f.canonical) && displayStats.length < 3) {
+                displayStats.push(f.canonical);
+            }
+        }
+        if (sortBy && !displayStats.includes(sortBy) && displayStats.length < 3 && sortBy !== "lvl") {
+            displayStats.push(sortBy);
+        }
+
+        let out = `<div class='term-box'><b>Search Results (${matches.length} match${matches.length === 1 ? "" : "es"} found${matches.length > displayItems.length ? `, showing top ${displayItems.length}` : ""}):</b>`;
+
+        let filterTags = [];
+        if (typeFilter) filterTags.push(`type: <b>${escapeHtml(typeFilter)}</b>`);
+        if (rarityFilter) filterTags.push(`rarity: <b>${escapeHtml(rarityFilter)}</b>`);
+        if (lvlMin > 0 || lvlMax < 121) filterTags.push(`lvl: <b>${lvlMin}-${lvlMax}</b>`);
+        if (queryStr) filterTags.push(`name: <b>"${escapeHtml(queryStr)}"</b>`);
+        for (const f of statFilters) {
+            const name = STAT_DISPLAY_NAMES[f.canonical] || f.canonical;
+            const cls = STAT_HEADER_CLASSES[f.canonical] || "";
+            const span = cls ? `<span class='${cls}'>${name}</span>` : name;
+            filterTags.push(`${span} ${f.op} ${f.rawVal}`);
+        }
+        if (sortBy) {
+            const sName = STAT_DISPLAY_NAMES[sortBy] || sortBy;
+            filterTags.push(`sorted by: <b>${sName} (${sortDesc ? "desc" : "asc"})</b>`);
+        }
+        if (filterTags.length > 0) {
+            out += `<div style='margin: 4px 0 6px 0; color: var(--term-muted); font-size: 12px;'>[Filters: ${filterTags.join(", ")}]</div>`;
+        }
+
+        out += "<table class='term-table'>";
+        out += "<tr><th>Name</th><th>Tier</th><th>Type</th><th>Level</th>";
+        for (const statKey of displayStats) {
+            const cls = STAT_HEADER_CLASSES[statKey] || "";
+            const title = STAT_DISPLAY_NAMES[statKey] || statKey;
+            out += `<th>${cls ? `<span class='${cls}'>${title}</span>` : title}</th>`;
+        }
+        out += "</tr>";
+
+        for (const it of displayItems) {
             const tierClass = getTierClass(it.tier);
-            out += `<tr><td><span class='${tierClass}'>${escapeHtml(it.displayName)}</span></td><td>${it.tier}</td><td>${it.type}</td><td>${it.lvl}</td></tr>`;
+            out += `<tr><td><span class='${tierClass}'>${escapeHtml(it.displayName)}</span></td><td>${it.tier}</td><td>${it.type}</td><td>${it.lvl}</td>`;
+            for (const statKey of displayStats) {
+                out += `<td>${formatStatDisplay(it, statKey)}</td>`;
+            }
+            out += "</tr>";
         }
         out += "</table><i>Use <code>equip &lt;slot&gt; &lt;name&gt;</code> to equip any of these items.</i></div>";
         printLine(out);
@@ -1443,6 +2101,23 @@
         for (const [name, item] of itemMap.entries()) {
             if (name.toLowerCase().includes(qLower)) {
                 if (isSlotCompatible(item, preferredSlot)) return item;
+            }
+        }
+
+        // 6. Normalized match (ignoring hyphens, apostrophes, spaces, periods)
+        const qNorm = qLower.replace(/[-_\s'\.]/g, '');
+        if (qNorm.length >= 3) {
+            for (const [name, item] of itemMap.entries()) {
+                const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
+                if (nNorm === qNorm) {
+                    if (isSlotCompatible(item, preferredSlot)) return item;
+                }
+            }
+            for (const [name, item] of itemMap.entries()) {
+                const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
+                if (nNorm.startsWith(qNorm) || nNorm.includes(qNorm)) {
+                    if (isSlotCompatible(item, preferredSlot)) return item;
+                }
             }
         }
 
