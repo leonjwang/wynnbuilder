@@ -278,6 +278,44 @@
             return;
         }
 
+        // Completing item names for item / info / lookup
+        if ((cmd === "item" || cmd === "info" || cmd === "lookup") && tokens.length >= 2) {
+            const itemPrefix = tokens.slice(1).join(" ").toLowerCase();
+            let candidateList = [];
+            if (typeof items !== "undefined") {
+                candidateList = items.map(i => i.displayName || i.name);
+            } else if (typeof itemMap !== "undefined") {
+                candidateList = Array.from(itemMap.keys());
+            }
+            if (typeof tomes !== "undefined") {
+                candidateList = candidateList.concat(tomes.map(t => t.displayName || t.name));
+            } else if (typeof tomeMap !== "undefined") {
+                candidateList = candidateList.concat(Array.from(tomeMap.keys()));
+            }
+            const matches = candidateList.filter(name => name && name.toLowerCase().startsWith(itemPrefix) && !name.startsWith("No "));
+            if (matches.length === 1) {
+                inputElem.value = `${tokens[0]} ${matches[0]}`;
+            } else if (matches.length > 1 && matches.length <= 15) {
+                printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+            } else if (matches.length > 15) {
+                printLine(`Matches (${matches.length}): ` + matches.slice(0, 10).map(m => `<span class='term-completion-item'>${m}</span>`).join(" ") + " ...", "term-completions");
+            }
+            return;
+        }
+
+        // Completing damage flags (-a, --advanced)
+        if ((cmd === "damage" || cmd === "dps" || cmd === "dam" || cmd === "d") && tokens.length === 2) {
+            const damFlags = ["-a", "--advanced", "-d", "--detailed"];
+            const prefix = tokens[1].toLowerCase();
+            const matches = damFlags.filter(f => f.startsWith(prefix));
+            if (matches.length === 1) {
+                inputElem.value = `${tokens[0]} ${matches[0]}`;
+            } else if (matches.length > 1) {
+                printLine(matches.map(m => `<span class='term-completion-item'>${m}</span>`).join(" "), "term-completions");
+            }
+            return;
+        }
+
         // Completing atree subcommands and ability names
         if (cmd === "atree" || cmd === "tree" || cmd === "ability") {
             const atreeSubcmds = ["toggle", "takable", "list", "info", "take", "remove", "reset", "help"];
@@ -341,7 +379,7 @@
             }
 
             if (prev === "-sort" || prev === "--sort") {
-                const sortKeys = ["lvl", "wDam", "eDam", "tDam", "fDam", "aDam", "nDam", "mr", "ms", "spd", "sdPct", "mdPct", "hp", "slots", "strReq", "dexReq", "intReq", "defReq", "agiReq"];
+                const sortKeys = ["lvl", "damage", "dam", "spelldamage", "sd", "meleedamage", "md", "skillpoints", "sp", "skp", "wDam", "eDam", "tDam", "fDam", "aDam", "nDam", "mr", "ms", "spd", "sdPct", "mdPct", "hp", "slots", "strReq", "dexReq", "intReq", "defReq", "agiReq"];
                 const matches = sortKeys.filter(k => k.toLowerCase().startsWith(current.toLowerCase()));
                 if (matches.length === 1) {
                     tokens[tokens.length - 1] = matches[0];
@@ -440,7 +478,7 @@
                 case "dps":
                 case "dam":
                 case "d":
-                    cmdDamage();
+                    cmdDamage(args);
                     break;
                 case "item":
                 case "info":
@@ -511,9 +549,9 @@
                 "level": "Usage: level <1-121>\nSets the character level and updates available skill points.",
                 "sp": "Usage: sp [auto | reset | <str> <dex> <int> <def> <agi> | <stat> <value>]\nExample: sp auto (allocates exact minimum requirements)\nExample: sp 0 0 100 0 50\nExample: sp int 80",
                 "stats": "Usage: stats [-d | --detailed]\nDisplays Health, Effective HP, Defenses, Mana regen/steal, and other build IDs.",
-                "damage": "Usage: damage\nDisplays weapon damages, melee DPS, ability spell damages, and poison DPS.",
+                "damage": "Usage: damage [-a | --advanced]\nDisplays weapon damages, melee DPS, ability spell damages, and poison DPS.\nUse -a or --advanced for detailed per-hit breakdown, non-crit/crit averages, and elemental damage ranges.\nExample: damage\nExample: damage -a",
                 "item": "Usage: item <item name>\nInspects full stats, rolls, requirements, and major IDs of any item in the database.",
-                "search": "Usage: search [query] [-t <type>] [-r <rarity>] [-lvl <min-max>] [stat filters] [-sort <stat>] [-n <limit>]\nStat Filters: wDam>0, wDamPct>20, mr>=3, spd>10, slots>=2, strReq<=50, +mr, +wDam\nAliases: water damage > 0, mana regen >= 3, walk speed > 15, spell damage > 100\nExample: search -t wand wDam>0\nExample: search -t wand water damage > 0\nExample: search water damage\nExample: search -t ring mr>=3 spd>10\nExample: search -t dagger -r mythic\nExample: search -t bow -lvl 90-106 -sort wDam -n 10",
+                "search": "Usage: search [query] [-t <type>] [-r <rarity>] [-lvl <min-max>] [stat filters] [-sort <stat>] [-n <limit>]\nStat Filters: damage>10, sd>20, md>15, wDam>0, wDamPct>20, mr>=3, spd>10, slots>=2, strReq<=50, sp>20, +mr, +sd, +dam\nAliases: damage > 10, spell damage > 20, melee damage > 15, water damage > 0, mana regen >= 3, walk speed > 15, skill points > 20\nExample: search -t helmet -sort sd -n 10\nExample: search -t wand sd>20\nExample: search -t ring mr>=3 spd>10\nExample: search -t dagger -r mythic -sort md\nExample: search -t bow -lvl 90-106 -sort dam -n 10",
                 "boost": "Usage: boost [warscream | totem | fortitude | emboldeningcry | judgement | clear]\nToggles combat damage & defense multipliers.",
                 "optimize": "Usage: optimize\nRuns WynnBuilder's Str/Dex damage optimizer on your remaining unassigned skill points.",
                 "link": "Usage: link\nDisplays the shareable WynnBuilder URL and copies it to your clipboard.",
@@ -539,7 +577,7 @@
   <tr><td><b class='term-line-info'>level</b> &lt;1-121&gt;</td><td>Set player level (e.g. <code>level 106</code>)</td></tr>
   <tr><td><b class='term-line-info'>sp</b> [auto|stats]</td><td>View or set skill points (e.g. <code>sp auto</code> for min requirements)</td></tr>
   <tr><td><b class='term-line-info'>stats</b> [-d]</td><td>Display HP, Effective HP, Defenses, Mana stats, and Roll IDs</td></tr>
-  <tr><td><b class='term-line-info'>damage</b> (dps)</td><td>Display Weapon damage, Melee DPS, Spell damages, and Poison</td></tr>
+  <tr><td><b class='term-line-info'>damage</b> [-a]</td><td>Display Weapon damage, Melee DPS, Spell damages (use <code>-a</code> for advanced breakdown)</td></tr>
   <tr><td><b class='term-line-info'>item</b> &lt;name&gt;</td><td>Inspect stats, requirements, and identifications of any item</td></tr>
   <tr><td><b class='term-line-info'>search</b> &lt;query&gt;</td><td>Search items by name, type (<code>-t</code>), rarity (<code>-r</code>), level (<code>-lvl</code>), and stat filters (e.g. <code>wDam&gt;0</code>, <code>mr&gt;=3</code>, <code>water damage &gt; 0</code>)</td></tr>
   <tr><td><b class='term-line-info'>boost</b> [buff]</td><td>View or toggle buffs (Warscream, Totem, Fortitude, Judgement)</td></tr>
@@ -553,6 +591,60 @@
 <i>Tip: Press <b>Tab</b> for command, slot, and item auto-completion. Use <b>Up/Down arrows</b> for history.</i>
 </div>`;
         printLine(helpText);
+    }
+
+    /**
+     * Helper to compute true assigned skill points and gear bonuses.
+     * In Wynnbuilder:
+     * - Total skill points are stored in DOM inputs (e.g. str-skp).
+     * - build.base_skillpoints contains min assigned points to wear equipment.
+     * - build.total_skillpoints contains base totals (minAssigned + gearBonus).
+     * - Gear bonus for attribute i is: gearBonus = baseTotals[i] - minAssigned[i].
+     * - Player assigned points: assigned = total - gearBonus.
+     */
+    function getSkillPointsBreakdown() {
+        if (!player_build) return null;
+        const spKeys = ["str", "dex", "int", "def", "agi"];
+        const spNames = ["Strength", "Dexterity", "Intelligence", "Defense", "Agility"];
+        const minAssigned = player_build.base_skillpoints || [0, 0, 0, 0, 0];
+        const baseTotals = player_build.total_skillpoints || [0, 0, 0, 0, 0];
+
+        const stats = [];
+        let totalAssigned = 0;
+
+        for (let i = 0; i < 5; i++) {
+            const key = spKeys[i];
+            const name = spNames[i];
+            const elem = getElemName(i);
+            const total = parseInt(document.getElementById(key + "-skp")?.value) || 0;
+            const minReq = minAssigned[i] || 0;
+            const baseTot = baseTotals[i] || 0;
+            const gearBonus = baseTot - minReq;
+            const assigned = total - gearBonus;
+
+            totalAssigned += assigned;
+
+            stats.push({
+                key,
+                name,
+                elem,
+                total,
+                minReq,
+                baseTot,
+                gearBonus,
+                assigned
+            });
+        }
+
+        const available = player_build.availableSkillpoints || levelToSkillPoints(player_build.level || 106);
+        const remaining = available - totalAssigned;
+
+        return {
+            stats,
+            totalAssigned,
+            available,
+            remaining
+        };
     }
 
     function cmdBuild() {
@@ -581,12 +673,40 @@
             let displayName = itemName;
             let tierClass = "tier-normal";
             let reqsStr = "-";
+            let slots = 0;
 
             if (itemName && itemMap.has(itemName)) {
                 const itemObj = itemMap.get(itemName);
+                slots = itemObj.slots || 0;
                 tierClass = getTierClass(itemObj.tier);
                 displayName = `<span class='${tierClass}'>${escapeHtml(itemObj.displayName)}</span>`;
                 
+                // Base skill points bonus indicator
+                const spShort = [
+                    { key: "str", short: "Str", elem: "earth" },
+                    { key: "dex", short: "Dex", elem: "thunder" },
+                    { key: "int", short: "Int", elem: "water" },
+                    { key: "def", short: "Def", elem: "fire" },
+                    { key: "agi", short: "Agi", elem: "air" }
+                ];
+                let spBonusList = [];
+                for (let s = 0; s < spShort.length; s++) {
+                    const spInfo = spShort[s];
+                    let spVal = 0;
+                    if (itemObj[spInfo.key] !== undefined && itemObj[spInfo.key] !== 0) {
+                        spVal = itemObj[spInfo.key];
+                    } else if (itemObj.skillpoints && Array.isArray(itemObj.skillpoints) && itemObj.skillpoints[s]) {
+                        spVal = itemObj.skillpoints[s];
+                    }
+                    if (spVal !== 0) {
+                        const sign = spVal > 0 ? "+" : "";
+                        spBonusList.push(`<span class='elem-${spInfo.elem}'>${sign}${spVal} ${spInfo.short}</span>`);
+                    }
+                }
+                if (spBonusList.length > 0) {
+                    displayName += ` <small>(${spBonusList.join(", ")})</small>`;
+                }
+
                 let reqs = [];
                 if (itemObj.lvl > 0) reqs.push(`Lvl ${itemObj.lvl}`);
                 if (itemObj.strReq > 0) reqs.push(`${itemObj.strReq} Str`);
@@ -599,32 +719,36 @@
                 displayName = `<span class='term-line-system'>(Empty)</span>`;
             }
 
-            const powderBadge = itemPowder ? `[<span class='elem-neutral'>${escapeHtml(itemPowder)}</span>]` : "-";
+            if (!slots && typeof player_build !== "undefined" && player_build) {
+                const bItem = (i === 8) ? player_build.weapon : (player_build.equipment ? player_build.equipment[i] : null);
+                if (bItem && bItem.statMap && bItem.statMap.has("slots")) {
+                    slots = bItem.statMap.get("slots") || 0;
+                }
+            }
+
+            const powderBadge = itemPowder
+                ? `[<span class='elem-neutral'>${escapeHtml(itemPowder)}</span>]`
+                : (slots > 0 ? `${slots}` : "-");
             out += `<tr><td><b>${slotName}</b></td><td>${displayName}</td><td>${powderBadge}</td><td><small>${reqsStr}</small></td></tr>`;
         }
         out += "</table>";
 
         // Skill points summary
-        const spNames = ["Strength", "Dexterity", "Intelligence", "Defense", "Agility"];
-        const spKeys = ["str", "dex", "int", "def", "agi"];
-        out += "<div style='margin-top: 8px;'><b>Skill Points:</b> ";
-        let spParts = [];
-        for (let i = 0; i < 5; i++) {
-            const base = parseInt(document.getElementById(spKeys[i] + "-skp")?.value) || 0;
-            const total = stat_agg_node ? (stat_agg_node.value.get(spKeys[i]) || 0) : base;
-            const diff = total - base;
-            const bonusStr = diff !== 0 ? ` (${diff >= 0 ? "+" : ""}${diff})` : "";
-            spParts.push(`<span class='elem-${getElemName(i)}'>${spNames[i]}: ${total}${bonusStr} [base: ${base}]</span>`);
-        }
-        out += spParts.join(" | ");
-        out += "</div>";
+        const spBreakdown = getSkillPointsBreakdown();
+        if (spBreakdown) {
+            out += "<div style='margin-top: 8px;'><b>Skill Points:</b> ";
+            let spParts = [];
+            for (const sp of spBreakdown.stats) {
+                const bonusStr = sp.gearBonus !== 0 ? ` (${sp.gearBonus >= 0 ? "+" : ""}${sp.gearBonus})` : "";
+                spParts.push(`<span class='elem-${sp.elem}'>${sp.name}: ${sp.total}${bonusStr} [assigned: ${sp.assigned}]</span>`);
+            }
+            out += spParts.join(" | ");
+            out += "</div>";
 
-        // Assigned vs Available
-        const avail = player_build.availableSkillpoints;
-        const assigned = player_build.assigned_skillpoints;
-        const remaining = avail - assigned;
-        const remClass = remaining < 0 ? "term-line-error" : "term-line-success";
-        out += `<div>Assigned: <b>${assigned}</b> / ${avail} | Remaining: <b class='${remClass}'>${remaining}</b></div>`;
+            // Assigned vs Available
+            const remClass = spBreakdown.remaining < 0 ? "term-line-error" : "term-line-success";
+            out += `<div>Assigned: <b>${spBreakdown.totalAssigned}</b> / ${spBreakdown.available} | Remaining: <b class='${remClass}'>${spBreakdown.remaining}</b></div>`;
+        }
 
         // Active Set Bonuses
         if (player_build.activeSetCounts && player_build.activeSetCounts.size > 0) {
@@ -940,6 +1064,7 @@
             printLine("Usage: powder &lt;slot&gt; &lt;powders&gt;", "term-line-warn");
             printLine("Example: powder weapon e6e6e6", "term-line-system");
             printLine("Example: powder helmet w6w6", "term-line-system");
+            printLine("Example: powder helmet []", "term-line-system");
             return;
         }
 
@@ -1004,20 +1129,23 @@
         }
 
         const spKeys = ["str", "dex", "int", "def", "agi"];
+        const spBreakdown = getSkillPointsBreakdown();
 
         if (args.length === 0) {
+            if (!spBreakdown) {
+                printLine("Cannot calculate skill points: build is not ready.", "term-line-warn");
+                return;
+            }
             // Display Skill Points table
             let out = "<div class='term-box'><b>Skill Points Breakdown:</b><table class='term-table'>";
-            out += "<tr><th>Attribute</th><th>Base Assigned</th><th>Gear Bonus</th><th>Total</th></tr>";
-            const spNames = ["Strength", "Dexterity", "Intelligence", "Defense", "Agility"];
-            for (let i = 0; i < 5; i++) {
-                const base = parseInt(document.getElementById(spKeys[i] + "-skp")?.value) || 0;
-                const total = stat_agg_node ? (stat_agg_node.value.get(spKeys[i]) || 0) : base;
-                const bonus = total - base;
-                out += `<tr><td><b class='elem-${getElemName(i)}'>${spNames[i]}</b></td><td>${base}</td><td>${bonus >= 0 ? "+" : ""}${bonus}</td><td><b>${total}</b></td></tr>`;
+            out += "<tr><th>Attribute</th><th>Assigned</th><th>Gear Bonus</th><th>Total</th></tr>";
+            for (const sp of spBreakdown.stats) {
+                const bonusStr = sp.gearBonus !== 0 ? `${sp.gearBonus >= 0 ? "+" : ""}${sp.gearBonus}` : "0";
+                out += `<tr><td><b class='elem-${sp.elem}'>${sp.name}</b></td><td>${sp.assigned}</td><td>${bonusStr}</td><td><b>${sp.total}</b></td></tr>`;
             }
             out += "</table>";
-            out += `Assigned: <b>${player_build.assigned_skillpoints}</b> / ${player_build.availableSkillpoints} | Remaining: <b>${player_build.availableSkillpoints - player_build.assigned_skillpoints}</b></div>`;
+            const remClass = spBreakdown.remaining < 0 ? "term-line-error" : "term-line-success";
+            out += `Assigned: <b>${spBreakdown.totalAssigned}</b> / ${spBreakdown.available} | Remaining: <b class='${remClass}'>${spBreakdown.remaining}</b></div>`;
             printLine(out);
             return;
         }
@@ -1026,32 +1154,36 @@
 
         // Auto allocate minimum required skill points
         if (sub === "auto" || sub === "min") {
-            const minReqs = player_build.base_skillpoints;
-            if (!minReqs) {
+            const minTotals = player_build.total_skillpoints;
+            if (!minTotals) {
                 printLine("Cannot auto-allocate skillpoints: build is not ready.", "term-line-error");
                 return;
             }
             for (let i = 0; i < 5; i++) {
                 const elem = document.getElementById(spKeys[i] + "-skp");
                 if (elem) {
-                    elem.value = minReqs[i];
+                    elem.value = minTotals[i];
                     elem.dispatchEvent(new Event("change"));
                 }
             }
-            printLine(`Auto-allocated minimum skill points: Str: ${minReqs[0]}, Dex: ${minReqs[1]}, Int: ${minReqs[2]}, Def: ${minReqs[3]}, Agi: ${minReqs[4]}.`, "term-line-success");
+            const minAssigned = player_build.base_skillpoints || [0, 0, 0, 0, 0];
+            printLine(`Auto-allocated minimum skill points: Str: ${minTotals[0]} [assigned: ${minAssigned[0]}], Dex: ${minTotals[1]} [assigned: ${minAssigned[1]}], Int: ${minTotals[2]} [assigned: ${minAssigned[2]}], Def: ${minTotals[3]} [assigned: ${minAssigned[3]}], Agi: ${minTotals[4]} [assigned: ${minAssigned[4]}].`, "term-line-success");
             return;
         }
 
-        // Reset to 0
+        // Reset player-assigned points to 0 while preserving gear bonuses
         if (sub === "reset") {
+            const minAssigned = player_build.base_skillpoints || [0, 0, 0, 0, 0];
+            const baseTotals = player_build.total_skillpoints || [0, 0, 0, 0, 0];
             for (let i = 0; i < 5; i++) {
                 const elem = document.getElementById(spKeys[i] + "-skp");
                 if (elem) {
-                    elem.value = 0;
+                    const gearBonus = baseTotals[i] - minAssigned[i];
+                    elem.value = Math.max(0, gearBonus);
                     elem.dispatchEvent(new Event("change"));
                 }
             }
-            printLine("Reset base skill points to 0.", "term-line-success");
+            printLine("Reset assigned skill points to 0 (gear bonuses retained).", "term-line-success");
             return;
         }
 
@@ -1076,7 +1208,13 @@
             if (elem) {
                 elem.value = val;
                 elem.dispatchEvent(new Event("change"));
-                printLine(`Set base <b>${sub.toUpperCase()}</b> to <b>${val}</b>.`, "term-line-success");
+                const idx = spKeys.indexOf(sub);
+                const minAssigned = player_build.base_skillpoints || [0, 0, 0, 0, 0];
+                const baseTotals = player_build.total_skillpoints || [0, 0, 0, 0, 0];
+                const gearBonus = (baseTotals[idx] || 0) - (minAssigned[idx] || 0);
+                const assigned = val - gearBonus;
+                const bonusStr = gearBonus !== 0 ? ` (Gear Bonus: ${gearBonus >= 0 ? "+" : ""}${gearBonus}, Assigned: ${assigned})` : "";
+                printLine(`Set <b>${sub.toUpperCase()}</b> to <b>${val}</b>${bonusStr}.`, "term-line-success");
             }
             return;
         }
@@ -1132,9 +1270,9 @@
 
         // Movement & Utility
         out += "<div style='margin-top: 8px;'><b>=== Utility & IDs ===</b><table class='term-table'>";
-        const speed = stats.get("speed") || 0;
+        const speed = stats.get("spd") || 0;
         const ls = stats.get("ls") || 0;
-        const exp = stats.get("exp") || 0;
+        const exp = stats.get("expd") || 0;
         const poison = stats.get("poison") || 0;
         const spRegen = stats.get("spRegen") || 0;
         const thorns = stats.get("thorns") || 0;
@@ -1160,11 +1298,179 @@
         printLine(out);
     }
 
-    function cmdDamage() {
+    const ELEM_NAME_MAP = {
+        "neutral": "elem-neutral",
+        "earth": "elem-earth",
+        "thunder": "elem-thunder",
+        "water": "elem-water",
+        "fire": "elem-fire",
+        "air": "elem-air"
+    };
+
+    const DAMAGE_CLASSES = ["Neutral", "Earth", "Thunder", "Water", "Fire", "Air"];
+
+    function getElemColorClass(clsName) {
+        if (!clsName) return "";
+        const lower = clsName.toLowerCase();
+        for (const [k, v] of Object.entries(ELEM_NAME_MAP)) {
+            if (lower.includes(k)) return v;
+        }
+        return "";
+    }
+
+    function parseSpellSummaryElem(spellElem) {
+        if (!spellElem) return null;
+        const text = (spellElem.textContent || "").trim();
+        if (!text || text.includes("Input a weapon")) return null;
+
+        const titleB = spellElem.querySelector("b");
+        let title = titleB ? titleB.textContent.trim() : "";
+        if (!title) {
+            title = text.split("\n")[0].trim();
+        }
+
+        const items = [];
+        const pElements = spellElem.querySelectorAll("p p");
+        if (pElements && pElements.length > 0) {
+            for (const p of pElements) {
+                const spans = p.querySelectorAll("span");
+                if (spans.length >= 2) {
+                    let label = spans[0].textContent.trim();
+                    if (!label.endsWith(":")) label += ":";
+                    const val = spans[1].textContent.trim();
+                    items.push({ label, val });
+                } else if (p.textContent.trim()) {
+                    items.push({ label: "", val: p.textContent.trim() });
+                }
+            }
+        } else {
+            const lines = (spellElem.innerText || spellElem.textContent || "").split("\n")
+                .map(l => l.trim())
+                .filter(l => l && l !== title);
+            for (const line of lines) {
+                const colonIdx = line.indexOf(":");
+                if (colonIdx !== -1) {
+                    const label = line.slice(0, colonIdx + 1).trim();
+                    const val = line.slice(colonIdx + 1).trim();
+                    items.push({ label, val });
+                } else {
+                    items.push({ label: "", val: line });
+                }
+            }
+        }
+
+        return { title, items };
+    }
+
+    function parseSpellDetailElem(detailElem, summaryElem) {
+        if (!detailElem) return null;
+        const text = (detailElem.textContent || "").trim();
+        if (!text || text.includes("Input a weapon")) return null;
+
+        let title = "";
+        const titleB = summaryElem ? summaryElem.querySelector("b") : null;
+        if (titleB) {
+            title = titleB.textContent.trim();
+        } else {
+            const pFirst = detailElem.querySelector("p");
+            if (pFirst) title = pFirst.textContent.trim();
+        }
+        if (!title) title = "Spell Damage";
+
+        const parts = [];
+        const children = Array.from(detailElem.children);
+        for (const child of children) {
+            if (child === detailElem.firstElementChild) continue;
+            if (!child.classList.contains("pt-3") && child.children.length < 2) continue;
+
+            let partName = "";
+            let multipliersText = "";
+            let multipliersHtml = "";
+            let avgDam = "";
+            let nonCritAvg = "";
+            const nonCritRanges = [];
+            let critAvg = "";
+            const critRanges = [];
+            let healAmount = "";
+
+            let currentSection = ""; // "none", "non-crit", "crit"
+
+            for (let i = 0; i < child.children.length; i++) {
+                const p = child.children[i];
+                const pText = (p.textContent || "").trim();
+                const className = p.className || "";
+
+                if (i === 0) {
+                    partName = pText;
+                    continue;
+                }
+
+                if (className.includes("Set") && !healAmount) {
+                    healAmount = pText;
+                    continue;
+                }
+
+                if (pText.startsWith("Average:")) {
+                    avgDam = pText.replace("Average:", "").trim();
+                    currentSection = "none";
+                } else if (pText.startsWith("Non-Crit Average:")) {
+                    nonCritAvg = pText.replace("Non-Crit Average:", "").trim();
+                    currentSection = "non-crit";
+                } else if (pText.startsWith("Crit Average:")) {
+                    critAvg = pText.replace("Crit Average:", "").trim();
+                    currentSection = "crit";
+                } else if (currentSection === "non-crit") {
+                    const elemClass = getElemColorClass(className);
+                    const elemName = DAMAGE_CLASSES.find(d => className.includes(d)) || "";
+                    nonCritRanges.push({ elem: elemName, cls: elemClass, range: pText });
+                } else if (currentSection === "crit") {
+                    const elemClass = getElemColorClass(className);
+                    const elemName = DAMAGE_CLASSES.find(d => className.includes(d)) || "";
+                    critRanges.push({ elem: elemName, cls: elemClass, range: pText });
+                } else if (pText.includes("%") || (p.children && p.children.length > 0 && p.querySelector("span"))) {
+                    multipliersText = pText;
+                    const multParts = [];
+                    for (const sp of p.querySelectorAll("span")) {
+                        const spCls = getElemColorClass(sp.className);
+                        const spText = sp.textContent.trim();
+                        if (sp.className && sp.className.includes("mc-gray")) {
+                            multParts.push(`<span style='color: var(--term-muted);'>${escapeHtml(spText)}</span>`);
+                        } else if (spCls) {
+                            multParts.push(`<span class='${spCls}'>${escapeHtml(spText)}</span>`);
+                        } else {
+                            multParts.push(escapeHtml(spText));
+                        }
+                    }
+                    const tag = pText.includes("Spell") ? " Spell" : (pText.includes("Melee") ? " Melee" : "");
+                    multipliersHtml = multParts.length > 0 ? (multParts.join(" ") + tag) : escapeHtml(pText);
+                }
+            }
+
+            if (!partName && !avgDam && !nonCritAvg && !critAvg && !healAmount) continue;
+
+            parts.push({
+                name: partName,
+                multipliersText,
+                multipliersHtml,
+                avgDam,
+                nonCritAvg,
+                nonCritRanges,
+                critAvg,
+                critRanges,
+                healAmount
+            });
+        }
+
+        return { title, parts };
+    }
+
+    function cmdDamage(args = []) {
         if (!player_build || !player_build.weapon) {
             printLine("No weapon equipped. Equip a weapon first with <span class='term-line-info'>equip weapon &lt;name&gt;</span>.", "term-line-warn");
             return;
         }
+
+        const isAdvanced = args.some(a => ["-a", "--advanced", "-d", "--detailed", "adv", "advanced", "all"].includes(a.toLowerCase()));
 
         const wep = player_build.weapon;
         const stats = stat_agg_node.value;
@@ -1172,45 +1478,116 @@
         const atkSpd = stats.get("atkSpd") || wep.statMap.get("atkSpd") || "NORMAL";
 
         let out = "<div class='term-box'>";
-        out += `<b>=== Damage Calculation [${escapeHtml(wepName)}] ===</b><br/>`;
-        out += `Attack Speed: <b>${escapeHtml(atkSpd)}</b><br/>`;
+        if(isAdvanced){
+            out += `<b>=== Damage Calculation [${escapeHtml(wepName)}]${isAdvanced ? " (Advanced Breakdown)" : ""} ===</b><br/>`;
+            out += `Attack Speed: <b>${escapeHtml(atkSpd)}</b><br/>`;
 
-        // Weapon Base Damages
-        out += "<table class='term-table'>";
-        out += "<tr><th>Type</th><th>Base Damage</th></tr>";
-        const damTypes = [
-            ["Neutral", "nDam", "neutral"],
-            ["Earth", "eDam", "earth"],
-            ["Thunder", "tDam", "thunder"],
-            ["Water", "wDam", "water"],
-            ["Fire", "fDam", "fire"],
-            ["Air", "aDam", "air"]
-        ];
-        for (const [label, key, elem] of damTypes) {
-            const damVal = wep.statMap.get(key);
-            if (damVal && damVal !== "0-0") {
-                out += `<tr><td><span class='elem-${elem}'>${label}</span></td><td><b>${damVal}</b></td></tr>`;
+            // Weapon Base Damages
+            out += "<table class='term-table'>";
+            out += "<tr><th>Type</th><th>Base Damage</th></tr>";
+            const damTypes = [
+                ["Neutral", "nDam", "neutral"],
+                ["Earth", "eDam", "earth"],
+                ["Thunder", "tDam", "thunder"],
+                ["Water", "wDam", "water"],
+                ["Fire", "fDam", "fire"],
+                ["Air", "aDam", "air"]
+            ];
+            for (const [label, key, elem] of damTypes) {
+                const damVal = wep.statMap.get(key);
+                if (damVal && damVal !== "0-0") {
+                    out += `<tr><td><span class='elem-${elem}'>${label}</span></td><td><b>${damVal}</b></td></tr>`;
+                }
             }
+            out += "</table>";
         }
-        out += "</table>";
 
         // Spells & Abilities from DOM display
-        out += "<div style='margin-top: 8px;'><b>Abilities & Spell Damages:</b><br/>";
+        out += `<div style='margin-top: 8px;'><b>Summary${isAdvanced ? " (Detailed per-hit & ranges)" : ""}:</b><br/>`;
         const spellIds = [0, 1, 2, 3, 4];
         let hasSpells = false;
 
         for (const idx of spellIds) {
-            const spellElem = document.getElementById("spell" + idx + "-infoAvg");
-            if (spellElem && spellElem.textContent.trim() && !spellElem.textContent.includes("Input a weapon")) {
-                hasSpells = true;
-                const cleanText = spellElem.innerText.replace(/\n\s*\n/g, '\n').trim();
-                out += `<div style='background: rgba(0,0,0,0.25); padding: 4px 8px; border-radius: 4px; margin: 4px 0;'>`;
-                out += `<pre style='margin: 0; font-family: inherit;'>${escapeHtml(cleanText)}</pre></div>`;
+            const spellAvgElem = document.getElementById("spell" + idx + "-infoAvg");
+            const spellDetailElem = document.getElementById("spell" + idx + "-info");
+
+            const summary = parseSpellSummaryElem(spellAvgElem);
+            if (!summary) continue;
+
+            hasSpells = true;
+
+            if (!isAdvanced) {
+                // Standard clean display with proper spacing & bullets
+                out += `<div style='background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin: 6px 0;'>`;
+                out += `<b class='term-line-info'>${escapeHtml(summary.title)}</b><br/>`;
+                for (const item of summary.items) {
+                    if (item.label) {
+                        out += `&nbsp;&nbsp;• ${escapeHtml(item.label)} <b>${escapeHtml(item.val)}</b><br/>`;
+                    } else {
+                        out += `&nbsp;&nbsp;• ${escapeHtml(item.val)}<br/>`;
+                    }
+                }
+                out += `</div>`;
+            } else {
+                // Advanced detailed display with parts, multipliers, non-crit/crit averages & elemental ranges
+                const detail = parseSpellDetailElem(spellDetailElem, spellAvgElem);
+                out += `<div style='background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin: 6px 0;'>`;
+                out += `<b class='term-line-info' style='font-size: 14px;'>${escapeHtml(summary.title)}</b>`;
+
+                if (!detail || !detail.parts || detail.parts.length === 0) {
+                    for (const item of summary.items) {
+                        if (item.label) {
+                            out += `<br/>&nbsp;&nbsp;• ${escapeHtml(item.label)} <b>${escapeHtml(item.val)}</b>`;
+                        } else {
+                            out += `<br/>&nbsp;&nbsp;• ${escapeHtml(item.val)}`;
+                        }
+                    }
+                } else {
+                    for (const part of detail.parts) {
+                        const isTotal = part.name.toLowerCase().includes("total");
+                        const borderColor = isTotal ? "var(--term-prompt, #58a6ff)" : "var(--term-border, #30363d)";
+                        out += `<div style='margin-top: 6px; padding-left: 8px; border-left: 2px solid ${borderColor};'>`;
+                        out += `<b>▸ ${escapeHtml(part.name)}</b>`;
+                        const multDisp = part.multipliersHtml || escapeHtml(part.multipliersText);
+                        if (multDisp) {
+                            out += ` <small style='color: var(--term-muted);'>[${multDisp}]</small>`;
+                        }
+                        out += `<br/>`;
+
+                        if (part.healAmount) {
+                            out += `&nbsp;&nbsp;• Heal: <span class='tier-set'><b>${escapeHtml(part.healAmount)}</b></span><br/>`;
+                        }
+                        if (part.avgDam) {
+                            out += `&nbsp;&nbsp;• Average: <b>${escapeHtml(part.avgDam)}</b><br/>`;
+                        }
+                        if (part.nonCritAvg) {
+                            let rangesStr = "";
+                            if (part.nonCritRanges && part.nonCritRanges.length > 0) {
+                                const rParts = part.nonCritRanges.map(r => `<span class='${r.cls || ""}'>${r.elem ? r.elem + ": " : ""}${escapeHtml(r.range)}</span>`);
+                                rangesStr = ` <small style='color: var(--term-muted);'>(${rParts.join(" | ")})</small>`;
+                            }
+                            out += `&nbsp;&nbsp;• Non-Crit Average: <b>${escapeHtml(part.nonCritAvg)}</b>${rangesStr}<br/>`;
+                        }
+                        if (part.critAvg) {
+                            let rangesStr = "";
+                            if (part.critRanges && part.critRanges.length > 0) {
+                                const rParts = part.critRanges.map(r => `<span class='${r.cls || ""}'>${r.elem ? r.elem + ": " : ""}${escapeHtml(r.range)}</span>`);
+                                rangesStr = ` <small style='color: var(--term-muted);'>(${rParts.join(" | ")})</small>`;
+                            }
+                            out += `&nbsp;&nbsp;• Crit Average: <b>${escapeHtml(part.critAvg)}</b>${rangesStr}<br/>`;
+                        }
+
+                        out += `</div>`;
+                    }
+                }
+                out += `</div>`;
             }
         }
 
         if (!hasSpells) {
             out += "<i>Equip a valid weapon and ability tree to calculate spell damages.</i><br/>";
+        } else if (!isAdvanced) {
+            out += "<small style='display: block; margin-top: 4px;' class='term-line-system'>Tip: Use <code>damage -a</code> or <code>damage --advanced</code> for full hit breakdown, non-crit/crit averages & elemental ranges.</small>";
         }
         out += "</div>";
 
@@ -1242,59 +1619,149 @@
 
         const tierClass = getTierClass(itemObj.tier);
         let out = "<div class='term-box'>";
-        out += `<b class='${tierClass}' style='font-size: 15px;'>${escapeHtml(itemObj.displayName)}</b><br/>`;
-        out += `<span style='color: var(--term-muted);'>${itemObj.tier} ${itemObj.type}</span><br/>`;
+        out += `<b class='${tierClass}' style='font-size: 15px;'>${escapeHtml(itemObj.displayName || itemObj.name)}</b><br/>`;
+        out += `<span style='color: var(--term-muted);'>${itemObj.tier || "Normal"} ${itemObj.type || itemObj.category || "Item"}</span><br/>`;
 
         // Requirements
         out += "<div style='margin: 6px 0;'><b>Requirements:</b> ";
         let reqs = [];
+        if (itemObj.classReq) reqs.push(itemObj.classReq.charAt(0).toUpperCase() + itemObj.classReq.slice(1));
         if (itemObj.lvl > 0) reqs.push(`Level ${itemObj.lvl}`);
-        if (itemObj.strReq > 0) reqs.push(`${itemObj.strReq} Str`);
-        if (itemObj.dexReq > 0) reqs.push(`${itemObj.dexReq} Dex`);
-        if (itemObj.intReq > 0) reqs.push(`${itemObj.intReq} Int`);
-        if (itemObj.defReq > 0) reqs.push(`${itemObj.defReq} Def`);
-        if (itemObj.agiReq > 0) reqs.push(`${itemObj.agiReq} Agi`);
+        if (itemObj.strReq > 0) reqs.push(`<span class='elem-earth'>${itemObj.strReq} Str</span>`);
+        if (itemObj.dexReq > 0) reqs.push(`<span class='elem-thunder'>${itemObj.dexReq} Dex</span>`);
+        if (itemObj.intReq > 0) reqs.push(`<span class='elem-water'>${itemObj.intReq} Int</span>`);
+        if (itemObj.defReq > 0) reqs.push(`<span class='elem-fire'>${itemObj.defReq} Def</span>`);
+        if (itemObj.agiReq > 0) reqs.push(`<span class='elem-air'>${itemObj.agiReq} Agi</span>`);
         out += (reqs.length > 0 ? reqs.join(", ") : "None") + "</div>";
 
-        // Base Damages / Defenses
-        out += "<table class='term-table'>";
-        if (itemObj.category === "weapon") {
-            out += `<tr><td>Attack Speed:</td><td><b>${itemObj.atkSpd || "NORMAL"}</b></td></tr>`;
-            if (itemObj.nDam !== "0-0") out += `<tr><td><span class='elem-neutral'>Neutral Damage:</span></td><td><b>${itemObj.nDam}</b></td></tr>`;
-            if (itemObj.eDam !== "0-0") out += `<tr><td><span class='elem-earth'>Earth Damage:</span></td><td><b>${itemObj.eDam}</b></td></tr>`;
-            if (itemObj.tDam !== "0-0") out += `<tr><td><span class='elem-thunder'>Thunder Damage:</span></td><td><b>${itemObj.tDam}</b></td></tr>`;
-            if (itemObj.wDam !== "0-0") out += `<tr><td><span class='elem-water'>Water Damage:</span></td><td><b>${itemObj.wDam}</b></td></tr>`;
-            if (itemObj.fDam !== "0-0") out += `<tr><td><span class='elem-fire'>Fire Damage:</span></td><td><b>${itemObj.fDam}</b></td></tr>`;
-            if (itemObj.aDam !== "0-0") out += `<tr><td><span class='elem-air'>Air Damage:</span></td><td><b>${itemObj.aDam}</b></td></tr>`;
-        } else if (itemObj.category === "armor") {
-            if (itemObj.hp > 0) out += `<tr><td>Health:</td><td><b class='tier-fabled'>+${itemObj.hp}</b></td></tr>`;
-            if (itemObj.eDef !== 0) out += `<tr><td><span class='elem-earth'>Earth Defense:</span></td><td><b>${itemObj.eDef}</b></td></tr>`;
-            if (itemObj.tDef !== 0) out += `<tr><td><span class='elem-thunder'>Thunder Defense:</span></td><td><b>${itemObj.tDef}</b></td></tr>`;
-            if (itemObj.wDef !== 0) out += `<tr><td><span class='elem-water'>Water Defense:</span></td><td><b>${itemObj.wDef}</b></td></tr>`;
-            if (itemObj.fDef !== 0) out += `<tr><td><span class='elem-fire'>Fire Defense:</span></td><td><b>${itemObj.fDef}</b></td></tr>`;
-            if (itemObj.aDef !== 0) out += `<tr><td><span class='elem-air'>Air Defense:</span></td><td><b>${itemObj.aDef}</b></td></tr>`;
+        // Elemental defense
+        let defs = [];
+        if (itemObj.eDef !== 0 && itemObj.eDef !== undefined) defs.push(`<span class='elem-earth'>Earth: ${itemObj.eDef}</span>`);
+        if (itemObj.tDef !== 0 && itemObj.tDef !== undefined) defs.push(`<span class='elem-thunder'>Thunder: ${itemObj.tDef}</span>`);
+        if (itemObj.wDef !== 0 && itemObj.wDef !== undefined) defs.push(`<span class='elem-water'>Water: ${itemObj.wDef}</span>`);
+        if (itemObj.fDef !== 0 && itemObj.fDef !== undefined) defs.push(`<span class='elem-fire'>Fire: ${itemObj.fDef}</span>`);
+        if (itemObj.aDef !== 0 && itemObj.aDef !== undefined) defs.push(`<span class='elem-air'>Air: ${itemObj.aDef}</span>`);
+        if(defs.length > 0) {
+            out += "<div style='margin: 6px 0;'><b>Elemental Defenses:</b> ";
+            out += defs.join(", ") + "</div>";
         }
-        if (itemObj.slots > 0) {
-            out += `<tr><td>Powder Slots:</td><td><b>${itemObj.slots}</b></td></tr>`;
-        }
-        out += "</table>";
 
-        // Identifications / Rolls
+        // Base Damages / Defenses / Stats (formatted in the same tier)
+        let baseRows = "";
+        if (itemObj.category === "weapon") {
+            baseRows += `<tr><td>Attack Speed:</td><td><b>${itemObj.atkSpd || "NORMAL"}</b></td></tr>`;
+            if (itemObj.nDam && itemObj.nDam !== "0-0") baseRows += `<tr><td><span class='elem-neutral'>Neutral Damage:</span></td><td><b>${itemObj.nDam}</b></td></tr>`;
+            if (itemObj.eDam && itemObj.eDam !== "0-0") baseRows += `<tr><td><span class='elem-earth'>Earth Damage:</span></td><td><b>${itemObj.eDam}</b></td></tr>`;
+            if (itemObj.tDam && itemObj.tDam !== "0-0") baseRows += `<tr><td><span class='elem-thunder'>Thunder Damage:</span></td><td><b>${itemObj.tDam}</b></td></tr>`;
+            if (itemObj.wDam && itemObj.wDam !== "0-0") baseRows += `<tr><td><span class='elem-water'>Water Damage:</span></td><td><b>${itemObj.wDam}</b></td></tr>`;
+            if (itemObj.fDam && itemObj.fDam !== "0-0") baseRows += `<tr><td><span class='elem-fire'>Fire Damage:</span></td><td><b>${itemObj.fDam}</b></td></tr>`;
+            if (itemObj.aDam && itemObj.aDam !== "0-0") baseRows += `<tr><td><span class='elem-air'>Air Damage:</span></td><td><b>${itemObj.aDam}</b></td></tr>`;
+        }
+
+        // Health (all categories: armor, accessory, weapons)
+        if (itemObj.hp !== 0 && itemObj.hp !== undefined) {
+            baseRows += `<tr><td>Health:</td><td><b class='tier-fabled'>${itemObj.hp > 0 ? "+" : ""}${itemObj.hp}</b></td></tr>`;
+        }
+
+        
+        // Main Attack Range (in raw data at same tier as hp/defenses)
+        if (itemObj.mainAttackRange !== undefined && itemObj.mainAttackRange !== 0) {
+            const rangeVal = itemObj.mainAttackRange;
+            const sign = rangeVal > 0 ? "+" : "";
+            baseRows += `<tr><td>Main Attack Range:</td><td><b>${sign}${rangeVal}%</b></td></tr>`;
+        }
+
+        // Skill points in raw data at same tier as hp/defenses/attack speed
+        const spDefs = [
+            { key: "str", name: "Strength", elem: "earth" },
+            { key: "dex", name: "Dexterity", elem: "thunder" },
+            { key: "int", name: "Intelligence", elem: "water" },
+            { key: "def", name: "Defense", elem: "fire" },
+            { key: "agi", name: "Agility", elem: "air" }
+        ];
+
+        for (let i = 0; i < spDefs.length; i++) {
+            const sp = spDefs[i];
+            let val = 0;
+            if (itemObj[sp.key] !== undefined && itemObj[sp.key] !== 0) {
+                val = itemObj[sp.key];
+            } else if (itemObj.skillpoints && Array.isArray(itemObj.skillpoints) && itemObj.skillpoints[i]) {
+                val = itemObj.skillpoints[i];
+            }
+            if (val !== 0) {
+                const sign = val > 0 ? "+" : "";
+                baseRows += `<tr><td><span class='elem-${sp.elem}'>${sp.name}:</span></td><td><b class='elem-${sp.elem}'>${sign}${val}</b></td></tr>`;
+            }
+        }
+
+        // Powder Slots
+        if (itemObj.slots > 0) {
+            baseRows += `<tr><td>Powder Slots:</td><td><b>${itemObj.slots}</b></td></tr>`;
+        }
+
+        if (baseRows) {
+            out += `<table class='term-table'>${baseRows}</table>`;
+        }
+
+        // Skill Points (Bonuses / Penalties Summary)
         const statMap = expandItem(itemObj);
         const minRolls = statMap.get("minRolls");
         const maxRolls = statMap.get("maxRolls");
 
-        if (maxRolls && maxRolls.size > 0) {
-            out += "<div style='margin-top: 6px;'><b>Identifications:</b><table class='term-table'>";
-            out += "<tr><th>Identification</th><th>Range [Min to Max]</th></tr>";
-            for (const [id, maxVal] of maxRolls.entries()) {
-                const minVal = minRolls.get(id);
-                const prefix = idPrefixes[id] || id;
-                const baseVal = statMap.get(id) || 0; // Unused atm
-                if(minVal === 0 && maxVal === 0 && baseVal === 0) continue;
-                out += `<tr><td>${prefix}</td><td>${minVal} to ${maxVal}</td></tr>`;
+        let spList = [];
+        for (let i = 0; i < spDefs.length; i++) {
+            const sp = spDefs[i];
+            let val = 0;
+            if (itemObj[sp.key] !== undefined && itemObj[sp.key] !== 0) {
+                val = itemObj[sp.key];
+            } else if (itemObj.skillpoints && Array.isArray(itemObj.skillpoints) && itemObj.skillpoints[i]) {
+                val = itemObj.skillpoints[i];
+            } else if (statMap && statMap.has(sp.key)) {
+                val = statMap.get(sp.key) || 0;
             }
-            out += "</table></div>";
+
+            if (minRolls && maxRolls && maxRolls.has(sp.key) && (minRolls.get(sp.key) !== 0 || maxRolls.get(sp.key) !== 0)) {
+                const minVal = minRolls.get(sp.key);
+                const maxVal = maxRolls.get(sp.key);
+                if (minVal === maxVal) {
+                    const sign = maxVal > 0 ? "+" : "";
+                    spList.push(`<span class='elem-${sp.elem}'>${sign}${maxVal} ${sp.name}</span>`);
+                } else {
+                    const signMin = minVal > 0 ? "+" : "";
+                    const signMax = maxVal > 0 ? "+" : "";
+                    spList.push(`<span class='elem-${sp.elem}'>${signMin}${minVal} to ${signMax}${maxVal} ${sp.name}</span>`);
+                }
+            } else if (val !== 0) {
+                const sign = val > 0 ? "+" : "";
+                spList.push(`<span class='elem-${sp.elem}'>${sign}${val} ${sp.name}</span>`);
+            }
+        }
+
+        // if (spList.length > 0) {
+        //     out += `<div style='margin: 6px 0;'><b>Skill Points:</b> ${spList.join(", ")}</div>`;
+        // }
+
+        // Identifications / Rolls
+        if (maxRolls && maxRolls.size > 0) {
+            let idRows = "";
+            for (const [id, maxVal] of maxRolls.entries()) {
+                if (["str", "dex", "int", "def", "agi"].includes(id)) continue;
+                const minVal = minRolls.get(id);
+                const prefix = (typeof idPrefixes !== "undefined" && idPrefixes[id]) ? idPrefixes[id] : id;
+                const baseVal = statMap.get(id) || 0;
+                if (minVal === 0 && maxVal === 0 && baseVal === 0) continue;
+                if (minVal === maxVal) {
+                    idRows += `<tr><td>${prefix}</td><td>${maxVal}</td></tr>`;
+                } else {
+                    idRows += `<tr><td>${prefix}</td><td>${minVal} to ${maxVal}</td></tr>`;
+                }
+            }
+            if (idRows) {
+                out += "<div style='margin-top: 6px;'><b>Identifications:</b><table class='term-table'>";
+                out += "<tr><th>Identification</th><th>Range [Min to Max]</th></tr>";
+                out += idRows;
+                out += "</table></div>";
+            }
         }
 
         // Major IDs
@@ -1368,12 +1835,15 @@
         "ndampct": "nDamPct", "ndamraw": "nDamRaw", "nbase": "nBase",
         "nsdpct": "nSdPct", "nsdraw": "nSdRaw", "nmdpct": "nMdPct", "nmdraw": "nMdRaw",
 
+        "damage": "damage", "dam": "damage", "dmg": "damage", "totaldamage": "damage",
         "dampct": "damPct", "damage%": "damPct", "dmg%": "damPct",
         "damraw": "damRaw", "damageraw": "damRaw",
         "rdampct": "rDamPct", "elemdamage%": "rDamPct", "rdamraw": "rDamRaw",
-        "sdpct": "sdPct", "spelldamage%": "sdPct", "spelldmg%": "sdPct", "sd": "sdPct",
+        "spelldamage": "spelldamage", "sd": "spelldamage", "spelldam": "spelldamage", "spelldmg": "spelldamage", "totalspelldamage": "spelldamage",
+        "sdpct": "sdPct", "spelldamage%": "sdPct", "spelldmg%": "sdPct",
         "sdraw": "sdRaw", "rawspelldamage": "sdRaw",
-        "mdpct": "mdPct", "meleedamage%": "mdPct", "meleedmg%": "mdPct", "md": "mdPct",
+        "meleedamage": "meleedamage", "md": "meleedamage", "meleedam": "meleedamage", "meleedmg": "meleedamage", "totalmeleedamage": "meleedamage",
+        "mdpct": "mdPct", "meleedamage%": "mdPct", "meleedmg%": "mdPct",
         "mdraw": "mdRaw", "rawmeleedamage": "mdRaw",
         "crit": "critDamPct", "critdampct": "critDamPct", "critdamage": "critDamPct",
 
@@ -1392,6 +1862,10 @@
         "sprint": "sprint", "sprintreg": "sprintReg", "jh": "jh", "jumpheight": "jh",
 
         "str": "str", "dex": "dex", "int": "int", "def": "def", "agi": "agi",
+        "skillpoints": "skillpoints", "skillpoint": "skillpoints", "skp": "skillpoints", "sp": "skillpoints",
+        "sumsp": "skillpoints", "sumskp": "skillpoints", "sumskillpoints": "skillpoints",
+        "totalsp": "skillpoints", "totalskp": "skillpoints", "totalskillpoints": "skillpoints",
+        "mainattackrange": "mainAttackRange", "attackrange": "mainAttackRange", "range": "mainAttackRange",
         "strreq": "strReq", "dexreq": "dexReq", "intreq": "intReq", "defreq": "defReq", "agireq": "agiReq",
         "lvl": "lvl", "level": "lvl",
         "major": "majorIds", "majorid": "majorIds", "mid": "majorIds", "majorids": "majorIds",
@@ -1399,6 +1873,7 @@
     };
 
     const STAT_DISPLAY_NAMES = {
+        "damage": "Total Damage", "spelldamage": "Spell Damage", "meleedamage": "Melee Damage",
         "wDam": "Water Dam", "wDamPct": "Water Dam %", "wDamRaw": "Water Dam Raw", "wBase": "Water Base",
         "wSdPct": "Water Spell %", "wMdPct": "Water Melee %", "wDef": "Water Def", "wDefPct": "Water Def %",
         "eDam": "Earth Dam", "eDamPct": "Earth Dam %", "eDamRaw": "Earth Dam Raw", "eBase": "Earth Base",
@@ -1419,17 +1894,22 @@
         "expd": "Exploding", "atkTier": "Attack Speed", "slots": "Slots",
         "xpb": "XP Bonus", "lb": "Loot Bonus", "lq": "Loot Quality",
         "str": "Strength", "dex": "Dexterity", "int": "Intelligence", "def": "Defense", "agi": "Agility",
+        "skillpoints": "Skill Points",
         "strReq": "Str Req", "dexReq": "Dex Req", "intReq": "Int Req", "defReq": "Def Req", "agiReq": "Agi Req",
+        "mainAttackRange": "Attack Range",
         "lvl": "Level", "majorIds": "Major ID"
     };
 
     const STAT_HEADER_CLASSES = {
+        "damage": "elem-neutral", "spelldamage": "elem-water", "meleedamage": "elem-earth",
         "wDam": "elem-water", "wDamPct": "elem-water", "wDamRaw": "elem-water", "wDef": "elem-water", "wDefPct": "elem-water", "wBase": "elem-water", "wSdPct": "elem-water", "wMdPct": "elem-water",
         "eDam": "elem-earth", "eDamPct": "elem-earth", "eDamRaw": "elem-earth", "eDef": "elem-earth", "eDefPct": "elem-earth", "eBase": "elem-earth", "eSdPct": "elem-earth", "eMdPct": "elem-earth",
         "tDam": "elem-thunder", "tDamPct": "elem-thunder", "tDamRaw": "elem-thunder", "tDef": "elem-thunder", "tDefPct": "elem-thunder", "tBase": "elem-thunder", "tSdPct": "elem-thunder", "tMdPct": "elem-thunder",
         "fDam": "elem-fire", "fDamPct": "elem-fire", "fDamRaw": "elem-fire", "fDef": "elem-fire", "fDefPct": "elem-fire", "fBase": "elem-fire", "fSdPct": "elem-fire", "fMdPct": "elem-fire",
         "aDam": "elem-air", "aDamPct": "elem-air", "aDamRaw": "elem-air", "aDef": "elem-air", "aDefPct": "elem-air", "aBase": "elem-air", "aSdPct": "elem-air", "aMdPct": "elem-air",
-        "nDam": "elem-neutral", "nDamPct": "elem-neutral", "nDamRaw": "elem-neutral"
+        "nDam": "elem-neutral", "nDamPct": "elem-neutral", "nDamRaw": "elem-neutral",
+        "str": "elem-earth", "dex": "elem-thunder", "int": "elem-water", "def": "elem-fire", "agi": "elem-air",
+        "skillpoints": "elem-neutral"
     };
 
     function parseDamageRangeMax(str) {
@@ -1443,6 +1923,167 @@
         const parts = str.split("-").map(Number);
         if (!isNaN(parts[0]) && !isNaN(parts[1])) return (parts[0] + parts[1]) / 2;
         return isNaN(parts[0]) ? 0 : parts[0];
+    }
+
+    function getEquippedWeapon() {
+        if (typeof player_build !== "undefined" && player_build && player_build.weapon) {
+            const wep = player_build.weapon;
+            if (!wep.statMap) return null;
+            const name = wep.statMap.get("displayName") || wep.statMap.get("name") || "";
+            if (name && name.startsWith("No ")) return null;
+            return wep;
+        }
+        return null;
+    }
+
+    function getWeaponDamageProfile() {
+        const wep = getEquippedWeapon();
+        if (!wep || !wep.statMap) return null;
+
+        const statMap = wep.statMap;
+        if (typeof apply_weapon_powders === "function" && typeof damage_keys !== "undefined") {
+            if (!statMap.has("nDam_") && statMap.has("nDam")) {
+                apply_weapon_powders(statMap);
+            }
+        }
+
+        const elemKeys = ["nDam_", "eDam_", "tDam_", "wDam_", "fDam_", "aDam_"];
+        const elemNames = ["n", "e", "t", "w", "f", "a"];
+        const damages = {};
+        let totalDmg = 0;
+
+        for (let i = 0; i < elemKeys.length; i++) {
+            const k = elemKeys[i];
+            const val = statMap.get(k);
+            let avg = 0;
+            if (Array.isArray(val)) {
+                if (Array.isArray(val[0])) {
+                    avg = (val[0][0] + val[0][1] + val[1][0] + val[1][1]) / 4;
+                } else if (val.length >= 2) {
+                    avg = (Number(val[0]) + Number(val[1])) / 2;
+                } else if (val.length === 1) {
+                    avg = Number(val[0]);
+                }
+            } else if (typeof val === "string") {
+                avg = parseDamageRangeAvg(val);
+            } else if (typeof val === "number") {
+                avg = val;
+            } else {
+                const rawVal = statMap.get(elemNames[i] + "Dam");
+                if (rawVal) avg = parseDamageRangeAvg(rawVal);
+            }
+            damages[elemNames[i]] = avg || 0;
+            totalDmg += (avg || 0);
+        }
+
+        if (totalDmg <= 0) return null;
+
+        let dps = 0;
+        if (typeof get_base_dps === "function") {
+            try {
+                let targetObj = statMap;
+                if (!targetObj.get && wep.get) targetObj = wep;
+                const rawDps = get_base_dps(targetObj);
+                if (Array.isArray(rawDps)) {
+                    dps = (rawDps[0] + rawDps[1]) / 2;
+                } else {
+                    dps = Number(rawDps) || 0;
+                }
+            } catch (e) {
+                dps = 0;
+            }
+        }
+
+        if (dps <= 0) {
+            let mult = 1.0;
+            const atkSpd = statMap.get("atkSpd");
+            if (typeof attackSpeeds !== "undefined" && typeof baseDamageMultiplier !== "undefined") {
+                const idx = attackSpeeds.indexOf(atkSpd);
+                if (idx !== -1) mult = baseDamageMultiplier[idx];
+            }
+            dps = totalDmg * mult;
+        }
+
+        if (dps <= 0) return null;
+
+        const elemDmg = totalDmg - damages.n;
+        return {
+            totalDmg,
+            elemDmg,
+            dps,
+            elemFraction: totalDmg > 0 ? elemDmg / totalDmg : 0,
+            fractions: {
+                n: totalDmg > 0 ? damages.n / totalDmg : 0,
+                e: totalDmg > 0 ? damages.e / totalDmg : 0,
+                t: totalDmg > 0 ? damages.t / totalDmg : 0,
+                w: totalDmg > 0 ? damages.w / totalDmg : 0,
+                f: totalDmg > 0 ? damages.f / totalDmg : 0,
+                a: totalDmg > 0 ? damages.a / totalDmg : 0,
+            }
+        };
+    }
+
+    function calculateItemDamageStat(item, mode, wepProfile) {
+        if (!wepProfile || !wepProfile.dps) return 0;
+
+        const f = wepProfile.fractions;
+        const elemF = wepProfile.elemFraction;
+        const dps = wepProfile.dps;
+
+        // 1. General damage %
+        let damPct = (item.damPct || 0);
+        damPct += (item.rDamPct || 0) * elemF;
+        damPct += (item.nDamPct || 0) * (f.n || 0);
+        damPct += (item.eDamPct || 0) * (f.e || 0);
+        damPct += (item.tDamPct || 0) * (f.t || 0);
+        damPct += (item.wDamPct || 0) * (f.w || 0);
+        damPct += (item.fDamPct || 0) * (f.f || 0);
+        damPct += (item.aDamPct || 0) * (f.a || 0);
+
+        // 2. General damage raw
+        let damRaw = (item.damRaw || 0) + (item.rDamRaw || 0) + (item.nDamRaw || 0) +
+                     (item.eDamRaw || 0) + (item.tDamRaw || 0) + (item.wDamRaw || 0) +
+                     (item.fDamRaw || 0) + (item.aDamRaw || 0);
+
+        let totalPct = damPct + (damRaw / dps) * 100;
+
+        if (mode === "spelldamage") {
+            // Spell damage %
+            let sdPct = (item.sdPct || 0);
+            sdPct += (item.rSdPct || 0) * elemF;
+            sdPct += (item.nSdPct || 0) * (f.n || 0);
+            sdPct += (item.eSdPct || 0) * (f.e || 0);
+            sdPct += (item.tSdPct || 0) * (f.t || 0);
+            sdPct += (item.wSdPct || 0) * (f.w || 0);
+            sdPct += (item.fSdPct || 0) * (f.f || 0);
+            sdPct += (item.aSdPct || 0) * (f.a || 0);
+
+            // Spell damage raw
+            let sdRaw = (item.sdRaw || 0) + (item.rSdRaw || 0) + (item.nSdRaw || 0) +
+                        (item.eSdRaw || 0) + (item.tSdRaw || 0) + (item.wSdRaw || 0) +
+                        (item.fSdRaw || 0) + (item.aSdRaw || 0);
+
+            totalPct += sdPct + (sdRaw / dps) * 100;
+        } else if (mode === "meleedamage") {
+            // Melee damage %
+            let mdPct = (item.mdPct || 0);
+            mdPct += (item.rMdPct || 0) * elemF;
+            mdPct += (item.nMdPct || 0) * (f.n || 0);
+            mdPct += (item.eMdPct || 0) * (f.e || 0);
+            mdPct += (item.tMdPct || 0) * (f.t || 0);
+            mdPct += (item.wMdPct || 0) * (f.w || 0);
+            mdPct += (item.fMdPct || 0) * (f.f || 0);
+            mdPct += (item.aMdPct || 0) * (f.a || 0);
+
+            // Melee damage raw
+            let mdRaw = (item.mdRaw || 0) + (item.rMdRaw || 0) + (item.nMdRaw || 0) +
+                        (item.eMdRaw || 0) + (item.tMdRaw || 0) + (item.wMdRaw || 0) +
+                        (item.fMdRaw || 0) + (item.aMdRaw || 0);
+
+            totalPct += mdPct + (mdRaw / dps) * 100;
+        }
+
+        return Math.round(totalPct * 10) / 10;
     }
 
     function getItemStatValue(item, canonicalKey) {
@@ -1501,6 +2142,25 @@
             case "fBase": return parseDamageRangeAvg(item.fDam);
             case "aBase": return parseDamageRangeAvg(item.aDam);
             case "nBase": return parseDamageRangeAvg(item.nDam);
+            case "str": return item.str !== undefined ? item.str : (item.skillpoints ? item.skillpoints[0] : 0);
+            case "dex": return item.dex !== undefined ? item.dex : (item.skillpoints ? item.skillpoints[1] : 0);
+            case "int": return item.int !== undefined ? item.int : (item.skillpoints ? item.skillpoints[2] : 0);
+            case "def": return item.def !== undefined ? item.def : (item.skillpoints ? item.skillpoints[3] : 0);
+            case "agi": return item.agi !== undefined ? item.agi : (item.skillpoints ? item.skillpoints[4] : 0);
+            case "skillpoints":
+                return getItemStatValue(item, "str") +
+                       getItemStatValue(item, "dex") +
+                       getItemStatValue(item, "int") +
+                       getItemStatValue(item, "def") +
+                       getItemStatValue(item, "agi");
+            case "damage":
+            case "spelldamage":
+            case "meleedamage": {
+                const wepProfile = getWeaponDamageProfile();
+                if (!wepProfile) return 0;
+                return calculateItemDamageStat(item, canonicalKey, wepProfile);
+            }
+            case "mainAttackRange": return item.mainAttackRange !== undefined ? item.mainAttackRange : 0;
             case "majorIds": return item.majorIds || [];
             default:
                 return item[canonicalKey] !== undefined ? item[canonicalKey] : 0;
@@ -1553,13 +2213,22 @@
         if (canonicalKey === "majorIds") {
             return (item.majorIds && item.majorIds.length > 0) ? `<b class="tier-legendary">${escapeHtml(item.majorIds.join(", "))}</b>` : "-";
         }
+        if (["damage", "spelldamage", "meleedamage"].includes(canonicalKey)) {
+            const wepProfile = getWeaponDamageProfile();
+            if (!wepProfile) return "-";
+            const val = getItemStatValue(item, canonicalKey);
+            if (val === 0) return "-";
+            const cssClass = STAT_HEADER_CLASSES[canonicalKey] || "";
+            const valStr = `${val > 0 ? "+" : ""}${val.toFixed(1)}%`;
+            return cssClass ? `<span class="${cssClass}">${valStr}</span>` : valStr;
+        }
 
-        const val = item[canonicalKey];
+        const val = getItemStatValue(item, canonicalKey);
         if (val === undefined || val === 0 || val === "0-0") return "-";
 
         const cssClass = STAT_HEADER_CLASSES[canonicalKey] || "";
         let valStr = "";
-        if (canonicalKey.endsWith("Pct") || canonicalKey === "spd" || canonicalKey === "thorns" || canonicalKey === "ref" || canonicalKey === "expd" || canonicalKey === "xpb" || canonicalKey === "lb" || canonicalKey === "lq" || canonicalKey === "healPct") {
+        if (canonicalKey.endsWith("Pct") || canonicalKey === "mainAttackRange" || canonicalKey === "spd" || canonicalKey === "thorns" || canonicalKey === "ref" || canonicalKey === "expd" || canonicalKey === "xpb" || canonicalKey === "lb" || canonicalKey === "lq" || canonicalKey === "healPct") {
             valStr = `${val > 0 ? "+" : ""}${val}%`;
         } else if (canonicalKey === "mr") {
             valStr = `${val > 0 ? "+" : ""}${val}/5s`;
@@ -1605,6 +2274,14 @@
             return c.includes(rawVal.toLowerCase());
         }
 
+        if (["damage", "spelldamage", "meleedamage"].includes(canonical)) {
+            const wepProfile = getWeaponDamageProfile();
+            if (!wepProfile) {
+                // If no weapon is equipped, ignore this filter
+                return true;
+            }
+        }
+
         const actual = getItemStatValue(item, canonical);
 
         if (op === ":") {
@@ -1634,19 +2311,24 @@
         if (args.length === 0) {
             let help = "<div class='term-box'><b>Usage:</b> <code>search &lt;query&gt; [-t &lt;type&gt;] [-r &lt;rarity&gt;] [-lvl &lt;min-max&gt;] [stat filters] [-sort &lt;stat&gt;] [-n &lt;limit&gt;]</code><br/><br/>";
             help += "<b>Examples:</b><br/>";
+            help += "&nbsp;&nbsp;<code>search -t helmet -sort sd -n 10</code> (top spell damage helmets for current weapon)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t wand sd&gt;20</code> (wands with >20% spell damage)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t dagger -sort md</code> (daggers sorted by melee damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t wand wDam&gt;0</code> (all wands with positive water damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t wand water damage &gt; 0</code><br/>";
             help += "&nbsp;&nbsp;<code>search water damage</code> (all items with positive water damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t ring mr&gt;=3 spd&gt;10</code> (rings with ≥3 MR and &gt;10% speed)<br/>";
             help += "&nbsp;&nbsp;<code>search -t dagger -r mythic</code><br/>";
-            help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort wDam -n 10</code><br/><br/>";
+            help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort dam -n 10</code><br/><br/>";
             help += "<b>Supported Stat Filters:</b><br/>";
+            help += "&nbsp;&nbsp;• <b>Dynamic Damage:</b> <code>damage</code> (or <code>dam</code>, <code>dmg</code>), <code>spelldamage</code> (or <code>sd</code>), <code>meleedamage</code> (or <code>md</code>) (scaled to equipped weapon DPS & elements)<br/>";
+            help += "&nbsp;&nbsp;• <b>Skill Points:</b> <code>skillpoints</code> (or <code>skp</code>, <code>sp</code>) (sum of Str + Dex + Int + Def + Agi)<br/>";
             help += "&nbsp;&nbsp;• <b>Elements:</b> <code>wDam</code> (water), <code>eDam</code> (earth), <code>tDam</code> (thunder), <code>fDam</code> (fire), <code>aDam</code> (air), <code>nDam</code> (neutral)<br/>";
-            help += "&nbsp;&nbsp;• <b>Sub-stats:</b> <code>wDamPct</code>, <code>wDamRaw</code>, <code>wBase</code>, <code>wSdPct</code>, <code>wMdPct</code>, <code>wDef</code>, <code>wDefPct</code><br/>";
-            help += "&nbsp;&nbsp;• <b>General:</b> <code>mr</code> (mana regen), <code>ms</code> (mana steal), <code>spd</code> (speed), <code>sdPct</code> (spell dam %), <code>mdPct</code> (melee dam %)<br/>";
+            help += "&nbsp;&nbsp;• <b>Sub-stats:</b> <code>wDamPct</code> (percent), <code>wDamRaw</code> (raw), <code>wBase</code>, <code>wSdPct</code> (spell damage percent), <code>wMdPct</code> (melee damage percent), <code>wDef</code>, <code>wDefPct</code><br/>";
+            help += "&nbsp;&nbsp;• <b>General:</b> <code>mr</code> (mana regen), <code>ms</code> (mana steal), <code>spd</code> (walk speed), <code>sdPct</code> (spell dam %), <code>mdPct</code> (melee dam %)<br/>";
             help += "&nbsp;&nbsp;• <b>Sustain/Utility:</b> <code>hp</code>, <code>hpr</code> (health regen), <code>ls</code> (life steal), <code>poison</code>, <code>slots</code>, <code>strReq</code>, <code>dexReq</code>, etc.<br/>";
             help += "&nbsp;&nbsp;• <b>Operators:</b> <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>, <code>!=</code><br/>";
-            help += "&nbsp;&nbsp;• <b>Shorthand:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code> (equivalent to <code>&gt;0</code>)</div>";
+            help += "&nbsp;&nbsp;• <b>Shorthand:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code>, <code>+sd</code>, <code>+dam</code>, <code>+md</code> (equivalent to <code>&gt;0</code>)</div>";
             printLine(help);
             return;
         }
@@ -1723,6 +2405,12 @@
                     const canonical = STAT_ALIASES[k] || k;
                     statFilters.push({ rawKey: k, canonical, op: ">", rawVal: "0", numVal: 0 });
                 }
+            } else if(tokLower === "-ns" || tokLower === "-nx" || tokLower === "-ni" || tokLower === "-nd" || tokLower === "-na") {
+                if(tokLower === "-ns") tokens.push("strReq=0");
+                else if(tokLower === "-nx") tokens.push("dexReq=0");
+                else if(tokLower === "-ni") tokens.push("intReq=0");
+                else if(tokLower === "-nd") tokens.push("defReq=0");
+                else if(tokLower === "-na") tokens.push("agiReq=0");
             } else {
                 const opMatch = tok.match(/^(.+?)(>=|<=|>|<|!=|=|:)(.+)$/);
                 if (opMatch) {
@@ -1730,12 +2418,14 @@
                     const op = opMatch[2];
                     const v = opMatch[3].trim().replace(/^["']|["']$/g, "");
 
-                    if (queryWords.length > 0) {
+                    while (queryWords.length > 0) {
                         const prev = queryWords[queryWords.length - 1];
                         const combined = prev + k;
                         if (STAT_ALIASES[combined]) {
                             k = combined;
                             queryWords.pop();
+                        } else {
+                            break;
                         }
                     }
                     const canonical = STAT_ALIASES[k] || k;
@@ -1802,7 +2492,8 @@
             matches.sort((a, b) => {
                 const vA = getItemStatValue(a, sortBy);
                 const vB = getItemStatValue(b, sortBy);
-                return sortDesc ? (vB - vA) : (vA - vB);
+                if (vB !== vA) return sortDesc ? (vB - vA) : (vA - vB);
+                return (b.lvl || 0) - (a.lvl || 0);
             });
         } else if (statFilters.length > 0) {
             const primary = statFilters[0].canonical;
@@ -1819,13 +2510,14 @@
         const displayItems = matches.slice(0, limit);
 
         // Determine extra columns to display (up to 3 stat columns)
+        const maxStats = 10;
         const displayStats = [];
         for (const f of statFilters) {
-            if (!displayStats.includes(f.canonical) && displayStats.length < 3) {
+            if (!displayStats.includes(f.canonical) && f.canonical !== "lvl" && displayStats.length < maxStats) {
                 displayStats.push(f.canonical);
             }
         }
-        if (sortBy && !displayStats.includes(sortBy) && displayStats.length < 3 && sortBy !== "lvl") {
+        if (sortBy && !displayStats.includes(sortBy) && sortBy !== "lvl" && displayStats.length < maxStats && sortBy !== "lvl") {
             displayStats.push(sortBy);
         }
 
@@ -1840,11 +2532,19 @@
             const name = STAT_DISPLAY_NAMES[f.canonical] || f.canonical;
             const cls = STAT_HEADER_CLASSES[f.canonical] || "";
             const span = cls ? `<span class='${cls}'>${name}</span>` : name;
-            filterTags.push(`${span} ${f.op} ${f.rawVal}`);
+            let tag = `${span} ${f.op} ${f.rawVal}`;
+            if (["damage", "spelldamage", "meleedamage"].includes(f.canonical) && !getWeaponDamageProfile()) {
+                tag += " <i style='color: var(--term-warn); font-size: 11px;'>(ignored: no weapon equipped)</i>";
+            }
+            filterTags.push(tag);
         }
         if (sortBy) {
             const sName = STAT_DISPLAY_NAMES[sortBy] || sortBy;
-            filterTags.push(`sorted by: <b>${sName} (${sortDesc ? "desc" : "asc"})</b>`);
+            let tag = `sorted by: <b>${sName} (${sortDesc ? "desc" : "asc"})</b>`;
+            if (["damage", "spelldamage", "meleedamage"].includes(sortBy) && !getWeaponDamageProfile()) {
+                tag += " <i style='color: var(--term-warn); font-size: 11px;'>(no weapon equipped)</i>";
+            }
+            filterTags.push(tag);
         }
         if (filterTags.length > 0) {
             out += `<div style='margin: 4px 0 6px 0; color: var(--term-muted); font-size: 12px;'>[Filters: ${filterTags.join(", ")}]</div>`;
@@ -1927,7 +2627,6 @@
         if (typeof optimizeStrDex === "function") {
             optimizeStrDex();
             printLine("Ran Str/Dex damage optimizer on remaining skill points.", "term-line-success");
-            cmdSkillPoints([]);
         } else {
             printLine("Optimizer function not available.", "term-line-error");
         }
@@ -2036,17 +2735,28 @@
         if (!itemMap || !query) return null;
         query = query.trim();
 
-        // 1. Exact match
-        if (itemMap.has(query)) {
-            const it = itemMap.get(query);
-            if (isSlotCompatible(it, preferredSlot)) return it;
+        if (itemMap) {
+            // 1. Exact match
+            if (itemMap.has(query)) {
+                const it = itemMap.get(query);
+                if (isSlotCompatible(it, preferredSlot)) return it;
+            }
+
+            // 2. Case-insensitive match in itemMap
+            const qLower = query.toLowerCase();
+            for (const [name, item] of itemMap.entries()) {
+                if (name.toLowerCase() === qLower) {
+                    if (isSlotCompatible(item, preferredSlot)) return item;
+                }
+            }
         }
 
-        // 2. Case-insensitive match in itemMap
-        const qLower = query.toLowerCase();
-        for (const [name, item] of itemMap.entries()) {
-            if (name.toLowerCase() === qLower) {
-                if (isSlotCompatible(item, preferredSlot)) return item;
+        // Check tomeMap if preferredSlot is null or tome
+        if ((!preferredSlot || preferredSlot === "tome") && typeof tomeMap !== "undefined" && tomeMap) {
+            if (tomeMap.has(query)) return tomeMap.get(query);
+            const qLower = query.toLowerCase();
+            for (const [name, item] of tomeMap.entries()) {
+                if (name.toLowerCase() === qLower) return item;
             }
         }
 
@@ -2054,7 +2764,7 @@
     }
 
     function resolveItem(query, preferredSlot = null) {
-        if (!itemMap || !query) return null;
+        if (!query) return null;
         query = query.trim();
 
         const exact = resolveItemExactOrCase(query, preferredSlot);
@@ -2090,34 +2800,46 @@
             }
         }
 
-        // 4. Global prefix match
-        for (const [name, item] of itemMap.entries()) {
-            if (name.toLowerCase().startsWith(qLower)) {
-                if (isSlotCompatible(item, preferredSlot)) return item;
-            }
-        }
-
-        // 5. Global substring match
-        for (const [name, item] of itemMap.entries()) {
-            if (name.toLowerCase().includes(qLower)) {
-                if (isSlotCompatible(item, preferredSlot)) return item;
-            }
-        }
-
-        // 6. Normalized match (ignoring hyphens, apostrophes, spaces, periods)
-        const qNorm = qLower.replace(/[-_\s'\.]/g, '');
-        if (qNorm.length >= 3) {
+        if (itemMap) {
+            // 4. Global prefix match
             for (const [name, item] of itemMap.entries()) {
-                const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
-                if (nNorm === qNorm) {
+                if (name.toLowerCase().startsWith(qLower)) {
                     if (isSlotCompatible(item, preferredSlot)) return item;
                 }
             }
+
+            // 5. Global substring match
             for (const [name, item] of itemMap.entries()) {
-                const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
-                if (nNorm.startsWith(qNorm) || nNorm.includes(qNorm)) {
+                if (name.toLowerCase().includes(qLower)) {
                     if (isSlotCompatible(item, preferredSlot)) return item;
                 }
+            }
+
+            // 6. Normalized match (ignoring hyphens, apostrophes, spaces, periods)
+            const qNorm = qLower.replace(/[-_\s'\.]/g, '');
+            if (qNorm.length >= 3) {
+                for (const [name, item] of itemMap.entries()) {
+                    const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
+                    if (nNorm === qNorm) {
+                        if (isSlotCompatible(item, preferredSlot)) return item;
+                    }
+                }
+                for (const [name, item] of itemMap.entries()) {
+                    const nNorm = name.toLowerCase().replace(/[-_\s'\.]/g, '');
+                    if (nNorm.startsWith(qNorm) || nNorm.includes(qNorm)) {
+                        if (isSlotCompatible(item, preferredSlot)) return item;
+                    }
+                }
+            }
+        }
+
+        // Check tomeMap if not matched in itemMap
+        if ((!preferredSlot || preferredSlot === "tome") && typeof tomeMap !== "undefined" && tomeMap) {
+            for (const [name, item] of tomeMap.entries()) {
+                if (name.toLowerCase().startsWith(qLower)) return item;
+            }
+            for (const [name, item] of tomeMap.entries()) {
+                if (name.toLowerCase().includes(qLower)) return item;
             }
         }
 
