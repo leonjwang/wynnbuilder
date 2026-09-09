@@ -1912,10 +1912,37 @@
         "skillpoints": "elem-neutral"
     };
 
+    function parseRangeMax(val) {
+        if (val === undefined || val === null) return 0;
+        if (typeof val === "number") return val;
+        if (Array.isArray(val)) {
+            if (val.length === 0) return 0;
+            return Math.max(...val.map(v => parseRangeMax(v)));
+        }
+        if (typeof val === "object") {
+            if (val.maximum !== undefined) return Number(val.maximum) || 0;
+            if (val.max !== undefined) return Number(val.max) || 0;
+            if (val.raw !== undefined) return Number(val.raw) || 0;
+            return 0;
+        }
+        if (typeof val === "string") {
+            val = val.trim().replace(/%/g, "").replace(/\+/g, "");
+            if (val.includes(" to ")) {
+                const parts = val.split(" to ").map(Number);
+                return Math.max(...parts);
+            }
+            const match = val.match(/^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$/);
+            if (match) {
+                return Math.max(Number(match[1]), Number(match[2]));
+            }
+            const num = Number(val);
+            return isNaN(num) ? 0 : num;
+        }
+        return 0;
+    }
+
     function parseDamageRangeMax(str) {
-        if (!str || typeof str !== "string") return 0;
-        const parts = str.split("-").map(Number);
-        return isNaN(parts[1]) ? (isNaN(parts[0]) ? 0 : parts[0]) : parts[1];
+        return parseRangeMax(str);
     }
 
     function parseDamageRangeAvg(str) {
@@ -1925,13 +1952,85 @@
         return isNaN(parts[0]) ? 0 : parts[0];
     }
 
+    function getItemMaxRoll(item, key) {
+        if (!item) return 0;
+
+        // 1. If item already has a statMap (Item instance or expanded item)
+        if (item.statMap && typeof item.statMap.get === "function") {
+            const maxRolls = item.statMap.get("maxRolls");
+            if (maxRolls && typeof maxRolls.get === "function" && maxRolls.has(key)) {
+                return parseRangeMax(maxRolls.get(key));
+            }
+            if (item.statMap.has(key)) {
+                return parseRangeMax(item.statMap.get(key));
+            }
+        }
+
+        // 2. If item is an ingredient with ids
+        if (item.ids && item.ids[key]) {
+            return parseRangeMax(item.ids[key]);
+        }
+
+        // 3. If item has maxRolls property
+        if (item.maxRolls) {
+            if (item.maxRolls instanceof Map && item.maxRolls.has(key)) {
+                return parseRangeMax(item.maxRolls.get(key));
+            }
+            if (typeof item.maxRolls === "object" && item.maxRolls[key] !== undefined) {
+                return parseRangeMax(item.maxRolls[key]);
+            }
+        }
+
+        // 4. Direct property on item (numbers, range strings like "10-20%", arrays [10, 20], min/max objects)
+        return parseRangeMax(item[key]);
+    }
+
     function getEquippedWeapon() {
         if (typeof player_build !== "undefined" && player_build && player_build.weapon) {
             const wep = player_build.weapon;
-            if (!wep.statMap) return null;
-            const name = wep.statMap.get("displayName") || wep.statMap.get("name") || "";
-            if (name && name.startsWith("No ")) return null;
-            return wep;
+            if (wep.statMap) {
+                if (wep.statMap.has("NONE")) return null;
+                const name = wep.statMap.get("displayName") || wep.statMap.get("name") || "";
+                if (name && !name.startsWith("No ")) return wep;
+            } else if (wep.name || wep.displayName) {
+                const name = wep.displayName || wep.name || "";
+                if (name && !name.startsWith("No ")) {
+                    if (typeof Item !== "undefined") {
+                        try {
+                            return new Item(wep);
+                        } catch (e) {
+                            return wep;
+                        }
+                    }
+                    return wep;
+                }
+            }
+        }
+        if (typeof document !== "undefined") {
+            const wepChoice = document.getElementById("weapon-choice");
+            if (wepChoice && wepChoice.value && !wepChoice.value.startsWith("No ")) {
+                if (typeof itemMap !== "undefined" && itemMap.has(wepChoice.value)) {
+                    const rawWep = itemMap.get(wepChoice.value);
+                    if (rawWep && typeof Item !== "undefined") {
+                        const wepItem = new Item(rawWep);
+                        const powderInput = document.getElementById("weapon-powder");
+                        if (powderInput && powderInput.value && typeof powderIDs !== "undefined" && typeof apply_weapon_powders === "function") {
+                            let pList = [];
+                            let p = powderInput.value;
+                            while (p.length >= 2) {
+                                const tok = p.slice(0, 2);
+                                if (powderIDs.has(tok)) pList.push(powderIDs.get(tok));
+                                p = p.slice(2);
+                            }
+                            wepItem.statMap.set("powders", pList);
+                            apply_weapon_powders(wepItem.statMap);
+                        } else if (typeof apply_weapon_powders === "function") {
+                            apply_weapon_powders(wepItem.statMap);
+                        }
+                        return wepItem;
+                    }
+                }
+            }
         }
         return null;
     }
@@ -2030,55 +2129,70 @@
         const elemF = wepProfile.elemFraction;
         const dps = wepProfile.dps;
 
-        // 1. General damage %
-        let damPct = (item.damPct || 0);
-        damPct += (item.rDamPct || 0) * elemF;
-        damPct += (item.nDamPct || 0) * (f.n || 0);
-        damPct += (item.eDamPct || 0) * (f.e || 0);
-        damPct += (item.tDamPct || 0) * (f.t || 0);
-        damPct += (item.wDamPct || 0) * (f.w || 0);
-        damPct += (item.fDamPct || 0) * (f.f || 0);
-        damPct += (item.aDamPct || 0) * (f.a || 0);
+        // 1. General damage % (scaled by elemental fractions)
+        let damPct = getItemMaxRoll(item, "damPct");
+        damPct += getItemMaxRoll(item, "rDamPct") * elemF;
+        damPct += getItemMaxRoll(item, "nDamPct") * (f.n || 0);
+        damPct += getItemMaxRoll(item, "eDamPct") * (f.e || 0);
+        damPct += getItemMaxRoll(item, "tDamPct") * (f.t || 0);
+        damPct += getItemMaxRoll(item, "wDamPct") * (f.w || 0);
+        damPct += getItemMaxRoll(item, "fDamPct") * (f.f || 0);
+        damPct += getItemMaxRoll(item, "aDamPct") * (f.a || 0);
 
-        // 2. General damage raw
-        let damRaw = (item.damRaw || 0) + (item.rDamRaw || 0) + (item.nDamRaw || 0) +
-                     (item.eDamRaw || 0) + (item.tDamRaw || 0) + (item.wDamRaw || 0) +
-                     (item.fDamRaw || 0) + (item.aDamRaw || 0);
+        // 2. General damage raw (scaled by elemental fractions)
+        let damRaw = getItemMaxRoll(item, "damRaw");
+        damRaw += getItemMaxRoll(item, "rDamRaw") * elemF;
+        damRaw += getItemMaxRoll(item, "nDamRaw") * (f.n || 0);
+        damRaw += getItemMaxRoll(item, "eDamRaw") * (f.e || 0);
+        damRaw += getItemMaxRoll(item, "tDamRaw") * (f.t || 0);
+        damRaw += getItemMaxRoll(item, "wDamRaw") * (f.w || 0);
+        damRaw += getItemMaxRoll(item, "fDamRaw") * (f.f || 0);
+        damRaw += getItemMaxRoll(item, "aDamRaw") * (f.a || 0);
 
         let totalPct = damPct + (damRaw / dps) * 100;
 
         if (mode === "spelldamage") {
-            // Spell damage %
-            let sdPct = (item.sdPct || 0);
-            sdPct += (item.rSdPct || 0) * elemF;
-            sdPct += (item.nSdPct || 0) * (f.n || 0);
-            sdPct += (item.eSdPct || 0) * (f.e || 0);
-            sdPct += (item.tSdPct || 0) * (f.t || 0);
-            sdPct += (item.wSdPct || 0) * (f.w || 0);
-            sdPct += (item.fSdPct || 0) * (f.f || 0);
-            sdPct += (item.aSdPct || 0) * (f.a || 0);
+            // Spell damage % (scaled by elemental fractions)
+            let sdPct = getItemMaxRoll(item, "sdPct");
+            sdPct += getItemMaxRoll(item, "rSdPct") * elemF;
+            sdPct += getItemMaxRoll(item, "nSdPct") * (f.n || 0);
+            sdPct += getItemMaxRoll(item, "eSdPct") * (f.e || 0);
+            sdPct += getItemMaxRoll(item, "tSdPct") * (f.t || 0);
+            sdPct += getItemMaxRoll(item, "wSdPct") * (f.w || 0);
+            sdPct += getItemMaxRoll(item, "fSdPct") * (f.f || 0);
+            sdPct += getItemMaxRoll(item, "aSdPct") * (f.a || 0);
 
-            // Spell damage raw
-            let sdRaw = (item.sdRaw || 0) + (item.rSdRaw || 0) + (item.nSdRaw || 0) +
-                        (item.eSdRaw || 0) + (item.tSdRaw || 0) + (item.wSdRaw || 0) +
-                        (item.fSdRaw || 0) + (item.aSdRaw || 0);
+            // Spell damage raw (scaled by elemental fractions)
+            let sdRaw = getItemMaxRoll(item, "sdRaw");
+            sdRaw += getItemMaxRoll(item, "rSdRaw") * elemF;
+            sdRaw += getItemMaxRoll(item, "nSdRaw") * (f.n || 0);
+            sdRaw += getItemMaxRoll(item, "eSdRaw") * (f.e || 0);
+            sdRaw += getItemMaxRoll(item, "tSdRaw") * (f.t || 0);
+            sdRaw += getItemMaxRoll(item, "wSdRaw") * (f.w || 0);
+            sdRaw += getItemMaxRoll(item, "fSdRaw") * (f.f || 0);
+            sdRaw += getItemMaxRoll(item, "aSdRaw") * (f.a || 0);
 
             totalPct += sdPct + (sdRaw / dps) * 100;
         } else if (mode === "meleedamage") {
-            // Melee damage %
-            let mdPct = (item.mdPct || 0);
-            mdPct += (item.rMdPct || 0) * elemF;
-            mdPct += (item.nMdPct || 0) * (f.n || 0);
-            mdPct += (item.eMdPct || 0) * (f.e || 0);
-            mdPct += (item.tMdPct || 0) * (f.t || 0);
-            mdPct += (item.wMdPct || 0) * (f.w || 0);
-            mdPct += (item.fMdPct || 0) * (f.f || 0);
-            mdPct += (item.aMdPct || 0) * (f.a || 0);
+            // Melee damage % (scaled by elemental fractions)
+            let mdPct = getItemMaxRoll(item, "mdPct");
+            mdPct += getItemMaxRoll(item, "rMdPct") * elemF;
+            mdPct += getItemMaxRoll(item, "nMdPct") * (f.n || 0);
+            mdPct += getItemMaxRoll(item, "eMdPct") * (f.e || 0);
+            mdPct += getItemMaxRoll(item, "tMdPct") * (f.t || 0);
+            mdPct += getItemMaxRoll(item, "wMdPct") * (f.w || 0);
+            mdPct += getItemMaxRoll(item, "fMdPct") * (f.f || 0);
+            mdPct += getItemMaxRoll(item, "aMdPct") * (f.a || 0);
 
-            // Melee damage raw
-            let mdRaw = (item.mdRaw || 0) + (item.rMdRaw || 0) + (item.nMdRaw || 0) +
-                        (item.eMdRaw || 0) + (item.tMdRaw || 0) + (item.wMdRaw || 0) +
-                        (item.fMdRaw || 0) + (item.aMdRaw || 0);
+            // Melee damage raw (scaled by elemental fractions)
+            let mdRaw = getItemMaxRoll(item, "mdRaw");
+            mdRaw += getItemMaxRoll(item, "rMdRaw") * elemF;
+            mdRaw += getItemMaxRoll(item, "nMdRaw") * (f.n || 0);
+            mdRaw += getItemMaxRoll(item, "eMdRaw") * (f.e || 0);
+            mdRaw += getItemMaxRoll(item, "tMdRaw") * (f.t || 0);
+            mdRaw += getItemMaxRoll(item, "wMdRaw") * (f.w || 0);
+            mdRaw += getItemMaxRoll(item, "fMdRaw") * (f.f || 0);
+            mdRaw += getItemMaxRoll(item, "aMdRaw") * (f.a || 0);
 
             totalPct += mdPct + (mdRaw / dps) * 100;
         }
@@ -2090,48 +2204,48 @@
         switch (canonicalKey) {
             case "wDam": {
                 const base = parseDamageRangeMax(item.wDam);
-                const pct = item.wDamPct || 0;
-                const raw = item.wDamRaw || 0;
+                const pct = getItemMaxRoll(item, "wDamPct");
+                const raw = getItemMaxRoll(item, "wDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "eDam": {
                 const base = parseDamageRangeMax(item.eDam);
-                const pct = item.eDamPct || 0;
-                const raw = item.eDamRaw || 0;
+                const pct = getItemMaxRoll(item, "eDamPct");
+                const raw = getItemMaxRoll(item, "eDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "tDam": {
                 const base = parseDamageRangeMax(item.tDam);
-                const pct = item.tDamPct || 0;
-                const raw = item.tDamRaw || 0;
+                const pct = getItemMaxRoll(item, "tDamPct");
+                const raw = getItemMaxRoll(item, "tDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "fDam": {
                 const base = parseDamageRangeMax(item.fDam);
-                const pct = item.fDamPct || 0;
-                const raw = item.fDamRaw || 0;
+                const pct = getItemMaxRoll(item, "fDamPct");
+                const raw = getItemMaxRoll(item, "fDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "aDam": {
                 const base = parseDamageRangeMax(item.aDam);
-                const pct = item.aDamPct || 0;
-                const raw = item.aDamRaw || 0;
+                const pct = getItemMaxRoll(item, "aDamPct");
+                const raw = getItemMaxRoll(item, "aDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "nDam": {
                 const base = parseDamageRangeMax(item.nDam);
-                const pct = item.nDamPct || 0;
-                const raw = item.nDamRaw || 0;
+                const pct = getItemMaxRoll(item, "nDamPct");
+                const raw = getItemMaxRoll(item, "nDamRaw");
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
@@ -2142,11 +2256,11 @@
             case "fBase": return parseDamageRangeAvg(item.fDam);
             case "aBase": return parseDamageRangeAvg(item.aDam);
             case "nBase": return parseDamageRangeAvg(item.nDam);
-            case "str": return item.str !== undefined ? item.str : (item.skillpoints ? item.skillpoints[0] : 0);
-            case "dex": return item.dex !== undefined ? item.dex : (item.skillpoints ? item.skillpoints[1] : 0);
-            case "int": return item.int !== undefined ? item.int : (item.skillpoints ? item.skillpoints[2] : 0);
-            case "def": return item.def !== undefined ? item.def : (item.skillpoints ? item.skillpoints[3] : 0);
-            case "agi": return item.agi !== undefined ? item.agi : (item.skillpoints ? item.skillpoints[4] : 0);
+            case "str": return item.str !== undefined ? parseRangeMax(item.str) : (item.skillpoints ? parseRangeMax(item.skillpoints[0]) : 0);
+            case "dex": return item.dex !== undefined ? parseRangeMax(item.dex) : (item.skillpoints ? parseRangeMax(item.skillpoints[1]) : 0);
+            case "int": return item.int !== undefined ? parseRangeMax(item.int) : (item.skillpoints ? parseRangeMax(item.skillpoints[2]) : 0);
+            case "def": return item.def !== undefined ? parseRangeMax(item.def) : (item.skillpoints ? parseRangeMax(item.skillpoints[3]) : 0);
+            case "agi": return item.agi !== undefined ? parseRangeMax(item.agi) : (item.skillpoints ? parseRangeMax(item.skillpoints[4]) : 0);
             case "skillpoints":
                 return getItemStatValue(item, "str") +
                        getItemStatValue(item, "dex") +
@@ -2160,10 +2274,10 @@
                 if (!wepProfile) return 0;
                 return calculateItemDamageStat(item, canonicalKey, wepProfile);
             }
-            case "mainAttackRange": return item.mainAttackRange !== undefined ? item.mainAttackRange : 0;
+            case "mainAttackRange": return item.mainAttackRange !== undefined ? parseRangeMax(item.mainAttackRange) : 0;
             case "majorIds": return item.majorIds || [];
             default:
-                return item[canonicalKey] !== undefined ? item[canonicalKey] : 0;
+                return getItemMaxRoll(item, canonicalKey);
         }
     }
 
