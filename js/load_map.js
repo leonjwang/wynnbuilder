@@ -54,10 +54,9 @@ async function map_load_local(init_func) {
  */
 async function load_map(init_func) {
 
-    let getUrl = window.location;
-    let baseUrl = getUrl.protocol + "//" + getUrl.host + "/" + getUrl.pathname.split('/')[1];
+    let baseUrl = (typeof getSiteRootUrl === "function" ? getSiteRootUrl() : (typeof Loader !== "undefined" && Loader.get_site_root ? Loader.get_site_root() : `${window.location.protocol}//${window.location.host}/`)).replace(/\/+$/, "");
     let url = baseUrl + "/data/baseline/compressed/terrs_compress.json";
-    url = url.replace(/\w+.html/, "") ; 
+    url = url.replace(/\w+.html/, ""); 
     let result = await (await fetch(url)).json();
     terrdata = result;
 

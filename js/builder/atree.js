@@ -126,8 +126,7 @@ let ATREES;
  * Load atree info remote DB (aka a big json file).
  */
 async function load_atree_data(version_str) {
-    let getUrl = window.location;
-    let baseUrl = `${getUrl.protocol}//${getUrl.host}/`;
+    let baseUrl = (typeof getSiteRootUrl === "function" ? getSiteRootUrl() : (typeof Loader !== "undefined" && Loader.get_site_root ? Loader.get_site_root() : `${window.location.protocol}//${window.location.host}/`)).replace(/\/+$/, "");
     // No random string -- we want to use caching
     let url = `${baseUrl}/data/${version_str}/atree.json`;
     ATREES = await (await fetch(url)).json();

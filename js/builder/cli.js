@@ -194,7 +194,7 @@
     function handleTabComplete() {
         const text = inputElem.value;
         const tokens = text.split(/\s+/);
-        
+
         // Completing command name
         if (tokens.length === 1) {
             const prefix = tokens[0].toLowerCase();
@@ -680,7 +680,7 @@
                 slots = itemObj.slots || 0;
                 tierClass = getTierClass(itemObj.tier);
                 displayName = `<span class='${tierClass}'>${escapeHtml(itemObj.displayName)}</span>`;
-                
+
                 // Base skill points bonus indicator
                 const spShort = [
                     { key: "str", short: "Str", elem: "earth" },
@@ -792,9 +792,15 @@
         printLine(out);
     }
 
+    function isWeaponItem(item) {
+        if (!item) return false;
+        if (item.category === "weapon") return true;
+        return ["bow", "spear", "wand", "dagger", "relik"].includes(item.type);
+    }
+
     function getSlotFromItem(item) {
         if (!item) return null;
-        if (item.category === "weapon" || ["bow", "spear", "wand", "dagger", "relik"].includes(item.type)) {
+        if (isWeaponItem(item)) {
             return "weapon";
         }
         if (item.type === "ring") {
@@ -1265,7 +1271,7 @@
         const netMana = document.getElementById("net-mana")?.textContent || "-";
         const manaUsed = document.getElementById("mana-used")?.textContent || "-";
         out += `<tr><td>Mana Regen:</td><td><b>${mr}/5s</b></td><td>Mana Steal:</td><td><b>${ms}/3s</b></td></tr>`;
-        out += `<tr><td>Net Mana/s:</td><td><b>${netMana}</b></td><td>Mana Used/s:</td><td><b>${manaUsed}</b></td></tr>`;
+        // out += `<tr><td>Net Mana/s:</td><td><b>${netMana}</b></td><td>Mana Used/s:</td><td><b>${manaUsed}</b></td></tr>`;
         out += `</table></div>`;
 
         // Movement & Utility
@@ -1473,6 +1479,11 @@
         const isAdvanced = args.some(a => ["-a", "--advanced", "-d", "--detailed", "adv", "advanced", "all"].includes(a.toLowerCase()));
 
         const wep = player_build.weapon;
+
+        if (typeof apply_weapon_powders === "function" && typeof wep.statMap.damage_keys !== "undefined") {
+            apply_weapon_powders(wep.statMap);
+        }
+
         const stats = stat_agg_node.value;
         const wepName = wep.statMap.get("displayName") || "None";
         const atkSpd = stats.get("atkSpd") || wep.statMap.get("atkSpd") || "NORMAL";
@@ -1486,17 +1497,18 @@
             out += "<table class='term-table'>";
             out += "<tr><th>Type</th><th>Base Damage</th></tr>";
             const damTypes = [
-                ["Neutral", "nDam", "neutral"],
-                ["Earth", "eDam", "earth"],
-                ["Thunder", "tDam", "thunder"],
-                ["Water", "wDam", "water"],
-                ["Fire", "fDam", "fire"],
-                ["Air", "aDam", "air"]
+                ["Neutral", "nDam_", "neutral"],
+                ["Earth", "eDam_", "earth"],
+                ["Thunder", "tDam_", "thunder"],
+                ["Water", "wDam_", "water"],
+                ["Fire", "fDam_", "fire"],
+                ["Air", "aDam_", "air"]
             ];
             for (const [label, key, elem] of damTypes) {
                 const damVal = wep.statMap.get(key);
-                if (damVal && damVal !== "0-0") {
-                    out += `<tr><td><span class='elem-${elem}'>${label}</span></td><td><b>${damVal}</b></td></tr>`;
+                const strVal = Array.isArray(damVal) ? damVal.join("-") : (damVal !== undefined && damVal !== null ? String(damVal) : "");
+                if (strVal && strVal !== "0-0") {
+                    out += `<tr><td><span class='elem-${elem}'>${label}</span></td><td><b><span class='elem-${elem}'>${strVal}</span></b></td></tr>`;
                 }
             }
             out += "</table>";
@@ -1663,7 +1675,7 @@
             baseRows += `<tr><td>Health:</td><td><b class='tier-fabled'>${itemObj.hp > 0 ? "+" : ""}${itemObj.hp}</b></td></tr>`;
         }
 
-        
+
         // Main Attack Range (in raw data at same tier as hp/defenses)
         if (itemObj.mainAttackRange !== undefined && itemObj.mainAttackRange !== 0) {
             const rangeVal = itemObj.mainAttackRange;
@@ -1954,34 +1966,9 @@
 
     function getItemMaxRoll(item, key) {
         if (!item) return 0;
-
-        // 1. If item already has a statMap (Item instance or expanded item)
-        if (item.statMap && typeof item.statMap.get === "function") {
-            const maxRolls = item.statMap.get("maxRolls");
-            if (maxRolls && typeof maxRolls.get === "function" && maxRolls.has(key)) {
-                return parseRangeMax(maxRolls.get(key));
-            }
-            if (item.statMap.has(key)) {
-                return parseRangeMax(item.statMap.get(key));
-            }
-        }
-
-        // 2. If item is an ingredient with ids
-        if (item.ids && item.ids[key]) {
-            return parseRangeMax(item.ids[key]);
-        }
-
-        // 3. If item has maxRolls property
-        if (item.maxRolls) {
-            if (item.maxRolls instanceof Map && item.maxRolls.has(key)) {
-                return parseRangeMax(item.maxRolls.get(key));
-            }
-            if (typeof item.maxRolls === "object" && item.maxRolls[key] !== undefined) {
-                return parseRangeMax(item.maxRolls[key]);
-            }
-        }
-
-        // 4. Direct property on item (numbers, range strings like "10-20%", arrays [10, 20], min/max objects)
+        const statMap = (item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+        const maxRolls = statMap ? statMap.get("maxRolls") : null;
+        if (maxRolls && maxRolls.has(key)) return maxRolls.get(key);
         return parseRangeMax(item[key]);
     }
 
@@ -2040,10 +2027,12 @@
         if (!wep || !wep.statMap) return null;
 
         const statMap = wep.statMap;
-        if (typeof apply_weapon_powders === "function" && typeof damage_keys !== "undefined") {
-            if (!statMap.has("nDam_") && statMap.has("nDam")) {
-                apply_weapon_powders(statMap);
-            }
+        // if (statMap && typeof statMap.set !== "function") {
+        //     delete statMap.set;
+        // }
+
+        if (typeof apply_weapon_powders === "function" && typeof statMap.damage_keys !== "undefined") {
+            apply_weapon_powders(statMap);
         }
 
         const elemKeys = ["nDam_", "eDam_", "tDam_", "wDam_", "fDam_", "aDam_"];
@@ -2129,70 +2118,79 @@
         const elemF = wepProfile.elemFraction;
         const dps = wepProfile.dps;
 
+        const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+        const maxRolls = statMap ? statMap.get("maxRolls") : null;
+        if (!maxRolls) return 0;
+
+        const getRoll = (k) => {
+            const r = maxRolls.get(k);
+            return (typeof r === "number" && !isNaN(r)) ? r : (item && item[k] !== undefined ? parseRangeMax(item[k]) : 0);
+        };
+
         // 1. General damage % (scaled by elemental fractions)
-        let damPct = getItemMaxRoll(item, "damPct");
-        damPct += getItemMaxRoll(item, "rDamPct") * elemF;
-        damPct += getItemMaxRoll(item, "nDamPct") * (f.n || 0);
-        damPct += getItemMaxRoll(item, "eDamPct") * (f.e || 0);
-        damPct += getItemMaxRoll(item, "tDamPct") * (f.t || 0);
-        damPct += getItemMaxRoll(item, "wDamPct") * (f.w || 0);
-        damPct += getItemMaxRoll(item, "fDamPct") * (f.f || 0);
-        damPct += getItemMaxRoll(item, "aDamPct") * (f.a || 0);
+        let damPct = getRoll("damPct");
+        damPct += getRoll("rDamPct") * elemF;
+        damPct += getRoll("nDamPct") * (f.n || 0);
+        damPct += getRoll("eDamPct") * (f.e || 0);
+        damPct += getRoll("tDamPct") * (f.t || 0);
+        damPct += getRoll("wDamPct") * (f.w || 0);
+        damPct += getRoll("fDamPct") * (f.f || 0);
+        damPct += getRoll("aDamPct") * (f.a || 0);
 
         // 2. General damage raw (scaled by elemental fractions)
-        let damRaw = getItemMaxRoll(item, "damRaw");
-        damRaw += getItemMaxRoll(item, "rDamRaw") * elemF;
-        damRaw += getItemMaxRoll(item, "nDamRaw") * (f.n || 0);
-        damRaw += getItemMaxRoll(item, "eDamRaw") * (f.e || 0);
-        damRaw += getItemMaxRoll(item, "tDamRaw") * (f.t || 0);
-        damRaw += getItemMaxRoll(item, "wDamRaw") * (f.w || 0);
-        damRaw += getItemMaxRoll(item, "fDamRaw") * (f.f || 0);
-        damRaw += getItemMaxRoll(item, "aDamRaw") * (f.a || 0);
+        let damRaw = getRoll("damRaw");
+        damRaw += getRoll("rDamRaw") * elemF;
+        damRaw += getRoll("nDamRaw") * (f.n || 0);
+        damRaw += getRoll("eDamRaw") * (f.e || 0);
+        damRaw += getRoll("tDamRaw") * (f.t || 0);
+        damRaw += getRoll("wDamRaw") * (f.w || 0);
+        damRaw += getRoll("fDamRaw") * (f.f || 0);
+        damRaw += getRoll("aDamRaw") * (f.a || 0);
 
         let totalPct = damPct + (damRaw / dps) * 100;
 
         if (mode === "spelldamage") {
             // Spell damage % (scaled by elemental fractions)
-            let sdPct = getItemMaxRoll(item, "sdPct");
-            sdPct += getItemMaxRoll(item, "rSdPct") * elemF;
-            sdPct += getItemMaxRoll(item, "nSdPct") * (f.n || 0);
-            sdPct += getItemMaxRoll(item, "eSdPct") * (f.e || 0);
-            sdPct += getItemMaxRoll(item, "tSdPct") * (f.t || 0);
-            sdPct += getItemMaxRoll(item, "wSdPct") * (f.w || 0);
-            sdPct += getItemMaxRoll(item, "fSdPct") * (f.f || 0);
-            sdPct += getItemMaxRoll(item, "aSdPct") * (f.a || 0);
+            let sdPct = getRoll("sdPct");
+            sdPct += getRoll("rSdPct") * elemF;
+            sdPct += getRoll("nSdPct") * (f.n || 0);
+            sdPct += getRoll("eSdPct") * (f.e || 0);
+            sdPct += getRoll("tSdPct") * (f.t || 0);
+            sdPct += getRoll("wSdPct") * (f.w || 0);
+            sdPct += getRoll("fSdPct") * (f.f || 0);
+            sdPct += getRoll("aSdPct") * (f.a || 0);
 
             // Spell damage raw (scaled by elemental fractions)
-            let sdRaw = getItemMaxRoll(item, "sdRaw");
-            sdRaw += getItemMaxRoll(item, "rSdRaw") * elemF;
-            sdRaw += getItemMaxRoll(item, "nSdRaw") * (f.n || 0);
-            sdRaw += getItemMaxRoll(item, "eSdRaw") * (f.e || 0);
-            sdRaw += getItemMaxRoll(item, "tSdRaw") * (f.t || 0);
-            sdRaw += getItemMaxRoll(item, "wSdRaw") * (f.w || 0);
-            sdRaw += getItemMaxRoll(item, "fSdRaw") * (f.f || 0);
-            sdRaw += getItemMaxRoll(item, "aSdRaw") * (f.a || 0);
+            let sdRaw = getRoll("sdRaw");
+            sdRaw += getRoll("rSdRaw") * elemF;
+            sdRaw += getRoll("nSdRaw") * (f.n || 0);
+            sdRaw += getRoll("eSdRaw") * (f.e || 0);
+            sdRaw += getRoll("tSdRaw") * (f.t || 0);
+            sdRaw += getRoll("wSdRaw") * (f.w || 0);
+            sdRaw += getRoll("fSdRaw") * (f.f || 0);
+            sdRaw += getRoll("aSdRaw") * (f.a || 0);
 
             totalPct += sdPct + (sdRaw / dps) * 100;
         } else if (mode === "meleedamage") {
             // Melee damage % (scaled by elemental fractions)
-            let mdPct = getItemMaxRoll(item, "mdPct");
-            mdPct += getItemMaxRoll(item, "rMdPct") * elemF;
-            mdPct += getItemMaxRoll(item, "nMdPct") * (f.n || 0);
-            mdPct += getItemMaxRoll(item, "eMdPct") * (f.e || 0);
-            mdPct += getItemMaxRoll(item, "tMdPct") * (f.t || 0);
-            mdPct += getItemMaxRoll(item, "wMdPct") * (f.w || 0);
-            mdPct += getItemMaxRoll(item, "fMdPct") * (f.f || 0);
-            mdPct += getItemMaxRoll(item, "aMdPct") * (f.a || 0);
+            let mdPct = getRoll("mdPct");
+            mdPct += getRoll("rMdPct") * elemF;
+            mdPct += getRoll("nMdPct") * (f.n || 0);
+            mdPct += getRoll("eMdPct") * (f.e || 0);
+            mdPct += getRoll("tMdPct") * (f.t || 0);
+            mdPct += getRoll("wMdPct") * (f.w || 0);
+            mdPct += getRoll("fMdPct") * (f.f || 0);
+            mdPct += getRoll("aMdPct") * (f.a || 0);
 
             // Melee damage raw (scaled by elemental fractions)
-            let mdRaw = getItemMaxRoll(item, "mdRaw");
-            mdRaw += getItemMaxRoll(item, "rMdRaw") * elemF;
-            mdRaw += getItemMaxRoll(item, "nMdRaw") * (f.n || 0);
-            mdRaw += getItemMaxRoll(item, "eMdRaw") * (f.e || 0);
-            mdRaw += getItemMaxRoll(item, "tMdRaw") * (f.t || 0);
-            mdRaw += getItemMaxRoll(item, "wMdRaw") * (f.w || 0);
-            mdRaw += getItemMaxRoll(item, "fMdRaw") * (f.f || 0);
-            mdRaw += getItemMaxRoll(item, "aMdRaw") * (f.a || 0);
+            let mdRaw = getRoll("mdRaw");
+            mdRaw += getRoll("rMdRaw") * elemF;
+            mdRaw += getRoll("nMdRaw") * (f.n || 0);
+            mdRaw += getRoll("eMdRaw") * (f.e || 0);
+            mdRaw += getRoll("tMdRaw") * (f.t || 0);
+            mdRaw += getRoll("wMdRaw") * (f.w || 0);
+            mdRaw += getRoll("fMdRaw") * (f.f || 0);
+            mdRaw += getRoll("aMdRaw") * (f.a || 0);
 
             totalPct += mdPct + (mdRaw / dps) * 100;
         }
@@ -2433,7 +2431,8 @@
             help += "&nbsp;&nbsp;<code>search water damage</code> (all items with positive water damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t ring mr&gt;=3 spd&gt;10</code> (rings with ≥3 MR and &gt;10% speed)<br/>";
             help += "&nbsp;&nbsp;<code>search -t dagger -r mythic</code><br/>";
-            help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort dam -n 10</code><br/><br/>";
+            help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort dam -n 10</code><br/>";
+            help += "&nbsp;&nbsp;<code>search -lvl 90-106 -sort spelldamage -noweapons</code><br/><br/>";
             help += "<b>Supported Stat Filters:</b><br/>";
             help += "&nbsp;&nbsp;• <b>Dynamic Damage:</b> <code>damage</code> (or <code>dam</code>, <code>dmg</code>), <code>spelldamage</code> (or <code>sd</code>), <code>meleedamage</code> (or <code>md</code>) (scaled to equipped weapon DPS & elements)<br/>";
             help += "&nbsp;&nbsp;• <b>Skill Points:</b> <code>skillpoints</code> (or <code>skp</code>, <code>sp</code>) (sum of Str + Dex + Int + Def + Agi)<br/>";
@@ -2442,7 +2441,7 @@
             help += "&nbsp;&nbsp;• <b>General:</b> <code>mr</code> (mana regen), <code>ms</code> (mana steal), <code>spd</code> (walk speed), <code>sdPct</code> (spell dam %), <code>mdPct</code> (melee dam %)<br/>";
             help += "&nbsp;&nbsp;• <b>Sustain/Utility:</b> <code>hp</code>, <code>hpr</code> (health regen), <code>ls</code> (life steal), <code>poison</code>, <code>slots</code>, <code>strReq</code>, <code>dexReq</code>, etc.<br/>";
             help += "&nbsp;&nbsp;• <b>Operators:</b> <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>, <code>!=</code><br/>";
-            help += "&nbsp;&nbsp;• <b>Shorthand:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code>, <code>+sd</code>, <code>+dam</code>, <code>+md</code> (equivalent to <code>&gt;0</code>)</div>";
+            help += "&nbsp;&nbsp;• <b>Show Stats:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code>, <code>+sd</code>, <code>+dam</code>, <code>+md</code> (adds a column displaying those stats)</div>";
             printLine(help);
             return;
         }
@@ -2476,6 +2475,8 @@
         let sortDesc = true;
         let statFilters = [];
         let queryWords = [];
+        let includedRows = [];
+        let includeWeapons = true;
 
         for (let i = 0; i < tokens.length; i++) {
             const tok = tokens[i];
@@ -2525,6 +2526,8 @@
                 else if(tokLower === "-ni") tokens.push("intReq=0");
                 else if(tokLower === "-nd") tokens.push("defReq=0");
                 else if(tokLower === "-na") tokens.push("agiReq=0");
+            } else if(tokLower === "-nw" || tokLower === "-noweapons") {
+                includeWeapons = false;
             } else {
                 const opMatch = tok.match(/^(.+?)(>=|<=|>|<|!=|=|:)(.+)$/);
                 if (opMatch) {
@@ -2547,7 +2550,7 @@
                 } else if (tok.startsWith("+")) {
                     const k = tok.slice(1).toLowerCase().replace(/[^a-z0-9%]/g, "");
                     const canonical = STAT_ALIASES[k] || k;
-                    statFilters.push({ rawKey: k, canonical, op: ">", rawVal: "0", numVal: 0 });
+                    includedRows.push({ rawKey: k, canonical });
                 } else {
                     queryWords.push(tok.toLowerCase());
                 }
@@ -2565,11 +2568,28 @@
             }
         }
 
+        const isDynamicDamageSort = ["damage", "spelldamage", "meleedamage"].includes(sortBy) ||
+            (!sortBy && statFilters.length > 0 && ["damage", "spelldamage", "meleedamage"].includes(statFilters[0].canonical));
+        const isDynamicDamageSearch = isDynamicDamageSort || statFilters.some(f => ["damage", "spelldamage", "meleedamage"].includes(f.canonical));
+
+        if (isDynamicDamageSearch) {
+            includeWeapons = false;
+            if (typeFilter) {
+                const slot = SEARCH_TYPE_ALIASES[typeFilter.toLowerCase()] || typeFilter.toLowerCase();
+                if (["weapon", "bow", "spear", "wand", "dagger", "relik"].includes(slot)) {
+                    printLine("Cannot search or sort weapons by dynamic damage stats (damage, spell damage, melee damage), as these stats are calculated relative to an equipped weapon.", "term-line-warn");
+                    return;
+                }
+            }
+        }
+
         const queryStr = queryWords.join(" ");
         let matches = [];
 
         for (const item of items) {
             if (!item.displayName || item.displayName.startsWith("No ")) continue;
+
+            if (!includeWeapons && isWeaponItem(item)) continue;
 
             if (typeFilter) {
                 const slot = SEARCH_TYPE_ALIASES[typeFilter] || typeFilter;
@@ -2623,10 +2643,15 @@
 
         const displayItems = matches.slice(0, limit);
 
-        // Determine extra columns to display (up to 3 stat columns)
-        const maxStats = 10;
+        // Determine extra columns to display
+        const maxStats = 15;
         const displayStats = [];
         for (const f of statFilters) {
+            if (!displayStats.includes(f.canonical) && f.canonical !== "lvl" && displayStats.length < maxStats) {
+                displayStats.push(f.canonical);
+            }
+        }
+        for (const f of includedRows) {
             if (!displayStats.includes(f.canonical) && f.canonical !== "lvl" && displayStats.length < maxStats) {
                 displayStats.push(f.canonical);
             }
@@ -2839,7 +2864,7 @@
         if (!slot) return true;
         slot = SLOT_ALIASES[slot] || slot;
         if (slot === "weapon") {
-            return ["bow", "spear", "wand", "dagger", "relik"].includes(item.type) || item.category === "weapon";
+            return isWeaponItem(item);
         }
         const cleanSlot = slot.replace(/[0-9]/g, '');
         return item.type === cleanSlot || item.category === cleanSlot || (item.type === "ring" && slot.startsWith("ring"));
@@ -3100,7 +3125,7 @@
 
         for (const node of inactive_nodes) {
             const [success, hard_error, reason] = abil_can_activate(node, atree_state, reachable, archetypeCount, apLeft);
-            
+
             const activeParents = [];
             for (const parent of node.parents) {
                 if (reachable.has(parent.ability.id)) {
@@ -3298,7 +3323,7 @@
 
         let out = "<div class='term-box'>";
         out += `<b>=== Ability Tree Summary [${playerClass.toUpperCase()}] ===</b><br/>`;
-        
+
         const apRemClass = analysis.apLeft < 0 ? "term-line-error" : "term-line-success";
         out += `Ability Points: <b>${analysis.apUsed}</b> / ${analysis.apCap} (<b class='${apRemClass}'>${analysis.apLeft}</b> remaining)<br/>`;
         out += `Active Abilities: <b>${analysis.activeCount}</b> / ${analysis.totalCount} | Takable: <b class='term-line-info'>${analysis.takableNodes.length}</b> available<br/>`;
@@ -3366,7 +3391,7 @@
             const abil = t.ability;
             const arch = abil.archetype ? ` <span class='atree-arch-badge'>${escapeHtml(abil.archetype)}</span>` : "";
             const cost = `<span class='atree-cost-badge'>${abil.cost} AP</span>`;
-            
+
             let connStr = "";
             if (abil.parents.length === 0) {
                 connStr = "<span class='term-line-success'>Starting Root Ability</span>";
@@ -3446,7 +3471,7 @@
 
             const arch = abil.archetype ? `<span class='atree-arch-badge'>${escapeHtml(abil.archetype)}</span>` : "-";
             const cost = `<span class='atree-cost-badge'>${abil.cost} AP</span>`;
-            
+
             let note = "-";
             if (abil.parents.length === 0) {
                 note = "<small class='term-line-success'>Root</small>";
@@ -3694,4 +3719,3 @@
         initCLI();
     }
 })();
-

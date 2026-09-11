@@ -1,5 +1,36 @@
-let getUrl = window.location;
-const url_base = getUrl.protocol + "//" + getUrl.host + "/" + getUrl.pathname.split('/')[1];
+let getUrl = typeof window !== "undefined" ? window.location : null;
+
+/**
+ * Returns the site root URL ending with a trailing slash.
+ * Handles official root domains (wynnbuilder.github.io/builder/),
+ * forked GitHub Pages subpaths (<username>.github.io/<repo>/builder/),
+ * localhost dev servers, and direct index.html access.
+ */
+function getSiteRootUrl() {
+    if (typeof window === "undefined" || !window.location) return "./";
+    let url;
+    try {
+        const URLClass = typeof URL !== "undefined" ? URL : (typeof window !== "undefined" && window.URL ? window.URL : globalThis.URL);
+        url = new URLClass(window.location.href);
+    } catch (_) {
+        return (window.location.protocol ? (window.location.protocol + "//" + window.location.host + "/") : "./");
+    }
+    let path = url.pathname;
+    const knownDirs = ["builder", "crafter", "custom", "item", "items", "map", "sets", "wynnfo", "atlas", "dev", "encoding_test", "ingredient", "ingredients", "ingredients_adv", "items_adv"];
+    for (const dir of knownDirs) {
+        if (path.endsWith("/" + dir)) {
+            return url.origin + path.substring(0, path.length - dir.length);
+        }
+        const dirSlash = "/" + dir + "/";
+        const idx = path.lastIndexOf(dirSlash);
+        if (idx !== -1) {
+            return url.origin + path.substring(0, idx + 1);
+        }
+    }
+    return url.origin + path.substring(0, path.lastIndexOf("/") + 1);
+}
+
+const url_base = getSiteRootUrl();
 
 // huge regex :doom:
 // replace with navigator.userAgentData.mobile once it has wider support

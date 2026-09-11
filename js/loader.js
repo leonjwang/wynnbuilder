@@ -96,18 +96,48 @@ class Loader {
      *
      * @returns Promise<JSON | JSON[]>
      */
+    static get_site_root() {
+        if (typeof getSiteRootUrl === "function") {
+            return getSiteRootUrl();
+        }
+        if (typeof window === "undefined" || !window.location) return "./";
+        let url;
+        try {
+            const URLClass = typeof URL !== "undefined" ? URL : (typeof window !== "undefined" && window.URL ? window.URL : globalThis.URL);
+            url = new URLClass(window.location.href);
+        } catch (_) {
+            return (window.location.protocol ? (window.location.protocol + "//" + window.location.host + "/") : "./");
+        }
+        let path = url.pathname;
+        const knownDirs = ["builder", "crafter", "custom", "item", "items", "map", "sets", "wynnfo", "atlas", "dev", "encoding_test", "ingredient", "ingredients", "ingredients_adv", "items_adv"];
+        for (const dir of knownDirs) {
+            if (path.endsWith("/" + dir)) {
+                return url.origin + path.substring(0, path.length - dir.length);
+            }
+            const dirSlash = "/" + dir + "/";
+            const idx = path.lastIndexOf(dirSlash);
+            if (idx !== -1) {
+                return url.origin + path.substring(0, idx + 1);
+            }
+        }
+        return url.origin + path.substring(0, path.lastIndexOf("/") + 1);
+    }
+
     static async load_json(paths, cache_mode='default') {
-        const protocol = window.location.protocol;
-        const host = window.location.host;
-        const base_url = `${protocol}//${host}`
+        const base_url = Loader.get_site_root().replace(/\/+$/, "");
+
+        const formatUrl = (path) => {
+            const clean = path.replace(/^\/+/, "");
+            return `${base_url}/${clean}.json`;
+        };
 
         if (typeof paths === "string") {
-            let url = `${base_url}/${paths}.json`;
+            let url = formatUrl(paths);
             return (await fetch(url, {cache: cache_mode})).json()
         } else if ([Symbol.iterator in paths]) {
             let promises = [];
             for (const path of paths) {
-                let url = `${base_url}/${path}.json`;
+                let url = formatUrl(path);
                 promises.push(await fetch(url, {cache: cache_mode}));
             }
             return Promise.all(promises.map(promise => promise.json()));

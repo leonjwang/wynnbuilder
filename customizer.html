@@ -17,9 +17,8 @@
     </head>
     <body id = "body"></body>
     <script type="text/javascript">
-let getUrl = window.location;
-let baseUrl = getUrl.protocol + "//" + getUrl.host + "/";
-let hash = window.location.hash;
-window.location.href = baseUrl + "custom/" + hash;
+const hash = window.location.hash || "";
+const target = new URL("custom/" + hash, window.location.href).href;
+window.location.replace(target);
     </script>
 </html>
