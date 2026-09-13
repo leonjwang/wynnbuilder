@@ -45,18 +45,18 @@ let boosts_node = new (class extends ComputeNode {
         res.set('defMult.Potion', 100 * def_boost);
         res.set('defMult.AbilityWeaken', 100 * weaken_boost);
 
-        if (document.getElementById('judgement-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('judgement-boost')?.classList.contains("toggleOn")) {
             res.set('damMult.Judgement', 20);
             res.set('defMult.Judgement', 20);
         }
-        if (document.getElementById('chantfanatic-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('chantfanatic-boost')?.classList.contains("toggleOn")) {
             res.set('defMult.Potion', 30);
         }
         // For some reason, yes, they can stack with anything else
-        if (document.getElementById('weathering-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('weathering-boost')?.classList.contains("toggleOn")) {
             res.set('defMult.Weathering', 20);
         }
-        if (document.getElementById('acidrain-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('acidrain-boost')?.classList.contains("toggleOn")) {
             res.set('damMult.AcidRain', 8);
         }
         return res;
@@ -146,7 +146,7 @@ let powder_special_input = new (class extends ComputeNode {
         let powder_specials = []; // [ [special, power], [special, power]]
         for (const sName of specialNames) {
             for (let i = 1; i < 8; i++) {
-                if (document.getElementById(sName.replace(" ", "_") + "-" + i).classList.contains("toggleOn")) {
+                if (document.getElementById(sName.replace(" ", "_") + "-" + i)?.classList.contains("toggleOn")) {
                     let powder_special = powderSpecialStats[specialNames.indexOf(sName.replace("_", " "))];
                     powder_specials.push([powder_special, i]);
                     break;
@@ -1075,16 +1075,16 @@ const radiance_node = new (class extends ComputeNode {
     compute_func(input_map) {
         const [statmap] = input_map.values();  // Extract values, pattern match it into size one list and bind to first element
         var boost = 1;
-        if (document.getElementById('radiance-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('radiance-boost')?.classList.contains("toggleOn")) {
             boost += 0.15;
         }
-        if (document.getElementById('divinehonor-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('divinehonor-boost')?.classList.contains("toggleOn")) {
             boost += 0.05;
         }
-        if (document.getElementById('shine-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('shine-boost')?.classList.contains("toggleOn")) {
             boost += 0.05;
         }
-        if (document.getElementById('judgement-boost').classList.contains("toggleOn")) {
+        if (document.getElementById('judgement-boost')?.classList.contains("toggleOn")) {
             boost = 1.4;
         }
 

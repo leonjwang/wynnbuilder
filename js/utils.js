@@ -15,19 +15,20 @@ function getSiteRootUrl() {
     } catch (_) {
         return (window.location.protocol ? (window.location.protocol + "//" + window.location.host + "/") : "./");
     }
+    const origin = (url.origin && url.origin !== "null") ? url.origin : (url.protocol === "file:" ? "file://" : (url.protocol ? `${url.protocol}//` : ""));
     let path = url.pathname;
     const knownDirs = ["builder", "crafter", "custom", "item", "items", "map", "sets", "wynnfo", "atlas", "dev", "encoding_test", "ingredient", "ingredients", "ingredients_adv", "items_adv"];
     for (const dir of knownDirs) {
         if (path.endsWith("/" + dir)) {
-            return url.origin + path.substring(0, path.length - dir.length);
+            return origin + path.substring(0, path.length - dir.length);
         }
         const dirSlash = "/" + dir + "/";
         const idx = path.lastIndexOf(dirSlash);
         if (idx !== -1) {
-            return url.origin + path.substring(0, idx + 1);
+            return origin + path.substring(0, idx + 1);
         }
     }
-    return url.origin + path.substring(0, path.lastIndexOf("/") + 1);
+    return origin + path.substring(0, path.lastIndexOf("/") + 1);
 }
 
 const url_base = getSiteRootUrl();
