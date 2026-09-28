@@ -392,7 +392,7 @@
             }
 
             if (current.startsWith("-")) {
-                const flags = ["-t", "-r", "-lvl", "-sort", "-n", "-f", "-ns", "-nx", "-ni", "-nd", "-na", "-nw", "-noweapons"];
+                const flags = ["-t", "-r", "-lvl", "-sort", "-n", "-f", "-ns", "-nx", "-ni", "-nd", "-na", "-nw", "-noweapons", "-min", "--min", "-minrolls"];
                 const matches = flags.filter(f => f.startsWith(current.toLowerCase()));
                 if (matches.length === 1) {
                     tokens[tokens.length - 1] = matches[0];
@@ -552,7 +552,7 @@
                 "stats": "Usage: stats [-d | --detailed]\nDisplays Health, Effective HP, Defenses, Mana regen/steal, and other build IDs.",
                 "damage": "Usage: damage [-a | --advanced]\nDisplays weapon damages, melee DPS, ability spell damages, and poison DPS.\nUse -a or --advanced for detailed per-hit breakdown, non-crit/crit averages, and elemental damage ranges.\nExample: damage\nExample: damage -a",
                 "item": "Usage: item <item name>\nInspects full stats, rolls, requirements, and major IDs of any item in the database.",
-                "search": "Usage: search [query] [-t <type>] [-r <rarity>] [-lvl <min-max>] [stat filters] [-sort <stat>] [-n <limit>]\nStat Filters: damage>10, sd>20, md>15, wDam>0, wDamPct>20, mr>=3, spd>10, slots>=2, strReq<=50, sp>20, +mr, +sd, +dam\nAliases: damage > 10, spell damage > 20, melee damage > 15, water damage > 0, mana regen >= 3, walk speed > 15, skill points > 20\nNote: sp (skill points) dynamically sums only non-filtered elements (e.g. -nx excludes Dex from sp).\nExample: search -t helmet -sort sd -n 10\nExample: search -t boots -nx -sort sp\nExample: search -t wand sd>20\nExample: search -t ring mr>=3 spd>10\nExample: search -t dagger -r mythic -sort md\nExample: search -t bow -lvl 90-106 -sort dam -n 10",
+                "search": "Usage: search [query] [-t <type>] [-r <rarity>] [-lvl <min-max>] [stat filters] [-sort <stat>] [-n <limit>] [-min]\nStat Filters: damage>10, sd>20, md>15, wDam>0, wDamPct>20, mr>=3, spd>10, slots>=2, strReq<=50, sp>20, +mr, +sd, +dam\nAliases: damage > 10, spell damage > 20, melee damage > 15, water damage > 0, mana regen >= 3, walk speed > 15, skill points > 20\nNote: sp (skill points) dynamically sums only non-filtered elements (e.g. -nx excludes Dex from sp).\nFlags: -min (calculate and display stats using minimum rolls instead of max rolls)\nExample: search -t helmet -sort sd -min -n 10\nExample: search -t boots -nx -sort sp\nExample: search -t wand sd>20\nExample: search -t ring mr>=3 -min\nExample: search -t dagger -r mythic -sort md\nExample: search -t bow -lvl 90-106 -sort dam -n 10",
                 "boost": "Usage: boost [warscream | totem | fortitude | emboldeningcry | judgement | clear]\nToggles combat damage & defense multipliers.",
                 "optimize": "Usage: optimize\nRuns WynnBuilder's Str/Dex damage optimizer on your remaining unassigned skill points.",
                 "link": "Usage: link\nDisplays the shareable WynnBuilder URL and copies it to your clipboard.",
@@ -1954,8 +1954,41 @@
         return 0;
     }
 
+    function parseRangeMin(val) {
+        if (val === undefined || val === null) return 0;
+        if (typeof val === "number") return val;
+        if (Array.isArray(val)) {
+            if (val.length === 0) return 0;
+            return Math.min(...val.map(v => parseRangeMin(v)));
+        }
+        if (typeof val === "object") {
+            if (val.minimum !== undefined) return Number(val.minimum) || 0;
+            if (val.min !== undefined) return Number(val.min) || 0;
+            if (val.raw !== undefined) return Number(val.raw) || 0;
+            return 0;
+        }
+        if (typeof val === "string") {
+            val = val.trim().replace(/%/g, "").replace(/\+/g, "");
+            if (val.includes(" to ")) {
+                const parts = val.split(" to ").map(Number);
+                return Math.min(...parts);
+            }
+            const match = val.match(/^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$/);
+            if (match) {
+                return Math.min(Number(match[1]), Number(match[2]));
+            }
+            const num = Number(val);
+            return isNaN(num) ? 0 : num;
+        }
+        return 0;
+    }
+
     function parseDamageRangeMax(str) {
         return parseRangeMax(str);
+    }
+
+    function parseDamageRangeMin(str) {
+        return parseRangeMin(str);
     }
 
     function parseDamageRangeAvg(str) {
@@ -1971,6 +2004,18 @@
         const maxRolls = statMap ? statMap.get("maxRolls") : null;
         if (maxRolls && maxRolls.has(key)) return maxRolls.get(key);
         return parseRangeMax(item[key]);
+    }
+
+    function getItemMinRoll(item, key) {
+        if (!item) return 0;
+        const statMap = (item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+        const minRolls = statMap ? statMap.get("minRolls") : null;
+        if (minRolls && minRolls.has(key)) return minRolls.get(key);
+        return parseRangeMin(item[key]);
+    }
+
+    function getItemRoll(item, key, useMin) {
+        return useMin ? getItemMinRoll(item, key) : getItemMaxRoll(item, key);
     }
 
     function getEquippedWeapon() {
@@ -2130,8 +2175,11 @@
         };
     }
 
-    function calculateItemDamageStat(item, mode, wepProfile) {
+    function calculateItemDamageStat(item, mode, wepProfile, useMinRollsOverride) {
         if (!wepProfile || !wepProfile.dps) return 0;
+        const useMin = useMinRollsOverride !== undefined
+            ? useMinRollsOverride
+            : (currentSearchContext && currentSearchContext.useMinRolls);
 
         const f = wepProfile.fractions;
         const elemF = wepProfile.elemFraction;
@@ -2147,12 +2195,13 @@
         const hasElem = wepProfile.hasElem !== undefined ? wepProfile.hasElem : (elemF > 0 || p.e || p.t || p.w || p.f || p.a);
 
         const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
-        const maxRolls = statMap ? statMap.get("maxRolls") : null;
-        if (!maxRolls) return 0;
+        const rolls = statMap ? statMap.get(useMin ? "minRolls" : "maxRolls") : null;
+        if (!rolls) return 0;
 
+        const parseFn = useMin ? parseRangeMin : parseRangeMax;
         const getRoll = (k) => {
-            const r = maxRolls.get(k);
-            return (typeof r === "number" && !isNaN(r)) ? r : (item && item[k] !== undefined ? parseRangeMax(item[k]) : 0);
+            const r = rolls.get(k);
+            return (typeof r === "number" && !isNaN(r)) ? r : (item && item[k] !== undefined ? parseFn(item[k]) : 0);
         };
 
         // 1. General damage % (scaled by elemental fractions)
@@ -2283,52 +2332,55 @@
         const ctx = contextOverride !== undefined ? contextOverride : currentSearchContext;
         const activeSp = ctx && ctx.activeSpElements ? ctx.activeSpElements : null;
         const cachedWepProfile = ctx && ctx.wepProfile ? ctx.wepProfile : null;
+        const useMinRolls = ctx && ctx.useMinRolls ? true : false;
+        const parseDmg = useMinRolls ? parseDamageRangeMin : parseDamageRangeMax;
+        const parseFn = useMinRolls ? parseRangeMin : parseRangeMax;
 
         switch (canonicalKey) {
             case "wDam": {
-                const base = parseDamageRangeMax(item.wDam);
-                const pct = getItemMaxRoll(item, "wDamPct");
-                const raw = getItemMaxRoll(item, "wDamRaw");
+                const base = parseDmg(item.wDam);
+                const pct = getItemRoll(item, "wDamPct", useMinRolls);
+                const raw = getItemRoll(item, "wDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "eDam": {
-                const base = parseDamageRangeMax(item.eDam);
-                const pct = getItemMaxRoll(item, "eDamPct");
-                const raw = getItemMaxRoll(item, "eDamRaw");
+                const base = parseDmg(item.eDam);
+                const pct = getItemRoll(item, "eDamPct", useMinRolls);
+                const raw = getItemRoll(item, "eDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "tDam": {
-                const base = parseDamageRangeMax(item.tDam);
-                const pct = getItemMaxRoll(item, "tDamPct");
-                const raw = getItemMaxRoll(item, "tDamRaw");
+                const base = parseDmg(item.tDam);
+                const pct = getItemRoll(item, "tDamPct", useMinRolls);
+                const raw = getItemRoll(item, "tDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "fDam": {
-                const base = parseDamageRangeMax(item.fDam);
-                const pct = getItemMaxRoll(item, "fDamPct");
-                const raw = getItemMaxRoll(item, "fDamRaw");
+                const base = parseDmg(item.fDam);
+                const pct = getItemRoll(item, "fDamPct", useMinRolls);
+                const raw = getItemRoll(item, "fDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "aDam": {
-                const base = parseDamageRangeMax(item.aDam);
-                const pct = getItemMaxRoll(item, "aDamPct");
-                const raw = getItemMaxRoll(item, "aDamRaw");
+                const base = parseDmg(item.aDam);
+                const pct = getItemRoll(item, "aDamPct", useMinRolls);
+                const raw = getItemRoll(item, "aDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
             }
             case "nDam": {
-                const base = parseDamageRangeMax(item.nDam);
-                const pct = getItemMaxRoll(item, "nDamPct");
-                const raw = getItemMaxRoll(item, "nDamRaw");
+                const base = parseDmg(item.nDam);
+                const pct = getItemRoll(item, "nDamPct", useMinRolls);
+                const raw = getItemRoll(item, "nDamRaw", useMinRolls);
                 if (base > 0) return base;
                 if (pct !== 0) return pct;
                 return raw;
@@ -2339,11 +2391,36 @@
             case "fBase": return parseDamageRangeAvg(item.fDam);
             case "aBase": return parseDamageRangeAvg(item.aDam);
             case "nBase": return parseDamageRangeAvg(item.nDam);
-            case "str": return item.str !== undefined ? parseRangeMax(item.str) : (item.skillpoints ? parseRangeMax(item.skillpoints[0]) : 0);
-            case "dex": return item.dex !== undefined ? parseRangeMax(item.dex) : (item.skillpoints ? parseRangeMax(item.skillpoints[1]) : 0);
-            case "int": return item.int !== undefined ? parseRangeMax(item.int) : (item.skillpoints ? parseRangeMax(item.skillpoints[2]) : 0);
-            case "def": return item.def !== undefined ? parseRangeMax(item.def) : (item.skillpoints ? parseRangeMax(item.skillpoints[3]) : 0);
-            case "agi": return item.agi !== undefined ? parseRangeMax(item.agi) : (item.skillpoints ? parseRangeMax(item.skillpoints[4]) : 0);
+            case "str": {
+                const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+                const rolls = statMap ? statMap.get(useMinRolls ? "minRolls" : "maxRolls") : null;
+                if (rolls && rolls.has("str") && rolls.get("str") !== 0) return rolls.get("str");
+                return item.str !== undefined ? parseFn(item.str) : (item.skillpoints ? parseFn(item.skillpoints[0]) : 0);
+            }
+            case "dex": {
+                const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+                const rolls = statMap ? statMap.get(useMinRolls ? "minRolls" : "maxRolls") : null;
+                if (rolls && rolls.has("dex") && rolls.get("dex") !== 0) return rolls.get("dex");
+                return item.dex !== undefined ? parseFn(item.dex) : (item.skillpoints ? parseFn(item.skillpoints[1]) : 0);
+            }
+            case "int": {
+                const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+                const rolls = statMap ? statMap.get(useMinRolls ? "minRolls" : "maxRolls") : null;
+                if (rolls && rolls.has("int") && rolls.get("int") !== 0) return rolls.get("int");
+                return item.int !== undefined ? parseFn(item.int) : (item.skillpoints ? parseFn(item.skillpoints[2]) : 0);
+            }
+            case "def": {
+                const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+                const rolls = statMap ? statMap.get(useMinRolls ? "minRolls" : "maxRolls") : null;
+                if (rolls && rolls.has("def") && rolls.get("def") !== 0) return rolls.get("def");
+                return item.def !== undefined ? parseFn(item.def) : (item.skillpoints ? parseFn(item.skillpoints[3]) : 0);
+            }
+            case "agi": {
+                const statMap = (item && item.statMap && typeof item.statMap.get === "function") ? item.statMap : expandItem(item);
+                const rolls = statMap ? statMap.get(useMinRolls ? "minRolls" : "maxRolls") : null;
+                if (rolls && rolls.has("agi") && rolls.get("agi") !== 0) return rolls.get("agi");
+                return item.agi !== undefined ? parseFn(item.agi) : (item.skillpoints ? parseFn(item.skillpoints[4]) : 0);
+            }
             case "skillpoints": {
                 let total = 0;
                 if (!activeSp || activeSp.str) total += getItemStatValue(item, "str", ctx);
@@ -2358,56 +2435,69 @@
             case "meleedamage": {
                 const wepProfile = cachedWepProfile || getWeaponDamageProfile();
                 if (!wepProfile) return 0;
-                return calculateItemDamageStat(item, canonicalKey, wepProfile);
+                return calculateItemDamageStat(item, canonicalKey, wepProfile, useMinRolls);
             }
-            case "mainAttackRange": return item.mainAttackRange !== undefined ? parseRangeMax(item.mainAttackRange) : 0;
+            case "mainAttackRange": return item.mainAttackRange !== undefined ? parseFn(item.mainAttackRange) : 0;
             case "majorIds": return item.majorIds || [];
             default:
-                return getItemMaxRoll(item, canonicalKey);
+                return getItemRoll(item, canonicalKey, useMinRolls);
         }
     }
 
     function formatStatDisplay(item, canonicalKey) {
+        const useMinRolls = (currentSearchContext && currentSearchContext.useMinRolls) || false;
         if (canonicalKey === "wDam") {
             let parts = [];
             if (item.wDam && item.wDam !== "0-0") parts.push(item.wDam);
-            if (item.wDamPct) parts.push(`${item.wDamPct > 0 ? "+" : ""}${item.wDamPct}%`);
-            if (item.wDamRaw) parts.push(`${item.wDamRaw > 0 ? "+" : ""}${item.wDamRaw}`);
+            const pct = getItemRoll(item, "wDamPct", useMinRolls);
+            const raw = getItemRoll(item, "wDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-water">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "eDam") {
             let parts = [];
             if (item.eDam && item.eDam !== "0-0") parts.push(item.eDam);
-            if (item.eDamPct) parts.push(`${item.eDamPct > 0 ? "+" : ""}${item.eDamPct}%`);
-            if (item.eDamRaw) parts.push(`${item.eDamRaw > 0 ? "+" : ""}${item.eDamRaw}`);
+            const pct = getItemRoll(item, "eDamPct", useMinRolls);
+            const raw = getItemRoll(item, "eDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-earth">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "tDam") {
             let parts = [];
             if (item.tDam && item.tDam !== "0-0") parts.push(item.tDam);
-            if (item.tDamPct) parts.push(`${item.tDamPct > 0 ? "+" : ""}${item.tDamPct}%`);
-            if (item.tDamRaw) parts.push(`${item.tDamRaw > 0 ? "+" : ""}${item.tDamRaw}`);
+            const pct = getItemRoll(item, "tDamPct", useMinRolls);
+            const raw = getItemRoll(item, "tDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-thunder">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "fDam") {
             let parts = [];
             if (item.fDam && item.fDam !== "0-0") parts.push(item.fDam);
-            if (item.fDamPct) parts.push(`${item.fDamPct > 0 ? "+" : ""}${item.fDamPct}%`);
-            if (item.fDamRaw) parts.push(`${item.fDamRaw > 0 ? "+" : ""}${item.fDamRaw}`);
+            const pct = getItemRoll(item, "fDamPct", useMinRolls);
+            const raw = getItemRoll(item, "fDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-fire">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "aDam") {
             let parts = [];
             if (item.aDam && item.aDam !== "0-0") parts.push(item.aDam);
-            if (item.aDamPct) parts.push(`${item.aDamPct > 0 ? "+" : ""}${item.aDamPct}%`);
-            if (item.aDamRaw) parts.push(`${item.aDamRaw > 0 ? "+" : ""}${item.aDamRaw}`);
+            const pct = getItemRoll(item, "aDamPct", useMinRolls);
+            const raw = getItemRoll(item, "aDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-air">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "nDam") {
             let parts = [];
             if (item.nDam && item.nDam !== "0-0") parts.push(item.nDam);
-            if (item.nDamPct) parts.push(`${item.nDamPct > 0 ? "+" : ""}${item.nDamPct}%`);
-            if (item.nDamRaw) parts.push(`${item.nDamRaw > 0 ? "+" : ""}${item.nDamRaw}`);
+            const pct = getItemRoll(item, "nDamPct", useMinRolls);
+            const raw = getItemRoll(item, "nDamRaw", useMinRolls);
+            if (pct) parts.push(`${pct > 0 ? "+" : ""}${pct}%`);
+            if (raw) parts.push(`${raw > 0 ? "+" : ""}${raw}`);
             return parts.length > 0 ? `<span class="elem-neutral">${parts.join(" ")}</span>` : "-";
         }
         if (canonicalKey === "majorIds") {
@@ -2509,16 +2599,16 @@
 
     function cmdSearch(args) {
         if (args.length === 0) {
-            let help = "<div class='term-box'><b>Usage:</b> <code>search &lt;query&gt; [-t &lt;type&gt;] [-r &lt;rarity&gt;] [-lvl &lt;min-max&gt;] [stat filters] [-sort &lt;stat&gt;] [-n &lt;limit&gt;]</code><br/><br/>";
+            let help = "<div class='term-box'><b>Usage:</b> <code>search &lt;query&gt; [-t &lt;type&gt;] [-r &lt;rarity&gt;] [-lvl &lt;min-max&gt;] [stat filters] [-sort &lt;stat&gt;] [-n &lt;limit&gt;] [-min]</code><br/><br/>";
             help += "<b>Examples:</b><br/>";
-            help += "&nbsp;&nbsp;<code>search -t helmet -sort sd -n 10</code> (top spell damage helmets for current weapon)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t helmet -sort sd -min -n 10</code> (top spell damage helmets using min rolls)<br/>";
             help += "&nbsp;&nbsp;<code>search -t boots -nx -sort sp</code> (boots sorted by non-Dex skill points)<br/>";
             help += "&nbsp;&nbsp;<code>search -t wand sd&gt;20</code> (wands with >20% spell damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t dagger -sort md</code> (daggers sorted by melee damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t wand wDam&gt;0</code> (all wands with positive water damage)<br/>";
             help += "&nbsp;&nbsp;<code>search -t wand water damage &gt; 0</code><br/>";
             help += "&nbsp;&nbsp;<code>search water damage</code> (all items with positive water damage)<br/>";
-            help += "&nbsp;&nbsp;<code>search -t ring mr&gt;=3 spd&gt;10</code> (rings with ≥3 MR and &gt;10% speed)<br/>";
+            help += "&nbsp;&nbsp;<code>search -t ring mr&gt;=3 spd&gt;10 -min</code> (rings with ≥3 min MR and &gt;10% min speed)<br/>";
             help += "&nbsp;&nbsp;<code>search -t dagger -r mythic</code><br/>";
             help += "&nbsp;&nbsp;<code>search -t bow -lvl 90-106 -sort dam -n 10</code><br/>";
             help += "&nbsp;&nbsp;<code>search -lvl 90-106 -sort spelldamage -noweapons</code><br/><br/>";
@@ -2530,6 +2620,7 @@
             help += "&nbsp;&nbsp;• <b>General:</b> <code>mr</code> (mana regen), <code>ms</code> (mana steal), <code>spd</code> (walk speed), <code>sdPct</code> (spell dam %), <code>mdPct</code> (melee dam %)<br/>";
             help += "&nbsp;&nbsp;• <b>Sustain/Utility:</b> <code>hp</code>, <code>hpr</code> (health regen), <code>ls</code> (life steal), <code>poison</code>, <code>slots</code>, <code>strReq</code>, <code>dexReq</code>, etc.<br/>";
             help += "&nbsp;&nbsp;• <b>Operators:</b> <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>, <code>!=</code><br/>";
+            help += "&nbsp;&nbsp;• <b>Flags:</b> <code>-min</code> (or <code>-minrolls</code>) (calculate and display stats using minimum rolls instead of max rolls), <code>-noweapons</code> (exclude weapons)<br/>";
             help += "&nbsp;&nbsp;• <b>Show Stats:</b> <code>+wDam</code>, <code>+mr</code>, <code>+spd</code>, <code>+sd</code>, <code>+dam</code>, <code>+md</code> (adds a column displaying those stats)</div>";
             printLine(help);
             return;
@@ -2566,6 +2657,7 @@
         let queryWords = [];
         let includedRows = [];
         let includeWeapons = true;
+        let useMinRolls = false;
 
         for (let i = 0; i < tokens.length; i++) {
             const tok = tokens[i];
@@ -2598,7 +2690,11 @@
             } else if ((tokLower === "-f" || tokLower === "--filter") && i + 1 < tokens.length) {
                 const fStr = tokens[++i];
                 const fStrLower = fStr.toLowerCase();
-                if (fStrLower === "-ns" || fStrLower === "-nstr") {
+                if (fStrLower === "-min" || fStrLower === "--min" || fStrLower === "-minrolls" || fStrLower === "--minrolls" || fStrLower === "-minroll" || fStrLower === "--minroll") {
+                    useMinRolls = true;
+                } else if (fStrLower === "-max" || fStrLower === "--max" || fStrLower === "-maxrolls" || fStrLower === "--maxrolls" || fStrLower === "-maxroll" || fStrLower === "--maxroll") {
+                    useMinRolls = false;
+                } else if (fStrLower === "-ns" || fStrLower === "-nstr") {
                     statFilters.push({ rawKey: "strreq", canonical: "strReq", op: "=", rawVal: "0", numVal: 0 });
                 } else if (fStrLower === "-nx" || fStrLower === "-ndex") {
                     statFilters.push({ rawKey: "dexreq", canonical: "dexReq", op: "=", rawVal: "0", numVal: 0 });
@@ -2622,6 +2718,10 @@
                         statFilters.push({ rawKey: k, canonical, op: ">", rawVal: "0", numVal: 0 });
                     }
                 }
+            } else if (tokLower === "-min" || tokLower === "--min" || tokLower === "-minrolls" || tokLower === "--minrolls" || tokLower === "-minroll" || tokLower === "--minroll") {
+                useMinRolls = true;
+            } else if (tokLower === "-max" || tokLower === "--max" || tokLower === "-maxrolls" || tokLower === "--maxrolls" || tokLower === "-maxroll" || tokLower === "--maxroll") {
+                useMinRolls = false;
             } else if (tokLower === "-ns" || tokLower === "-nstr") {
                 statFilters.push({ rawKey: "strreq", canonical: "strReq", op: "=", rawVal: "0", numVal: 0 });
             } else if (tokLower === "-nx" || tokLower === "-ndex") {
@@ -2695,7 +2795,7 @@
         const activeSpElements = getActiveSpElements(statFilters);
 
         try {
-            currentSearchContext = { wepProfile, activeSpElements };
+            currentSearchContext = { wepProfile, activeSpElements, useMinRolls };
 
             const queryStr = queryWords.join(" ");
             let matches = [];
@@ -2774,9 +2874,10 @@
                 displayStats.push(sortBy);
             }
 
-            let out = `<div class='term-box'><b>Search Results (${matches.length} match${matches.length === 1 ? "" : "es"} found${matches.length > displayItems.length ? `, showing top ${displayItems.length}` : ""}):</b>`;
+            let out = `<div class='term-box'><b>Search Results (${matches.length} match${matches.length === 1 ? "" : "es"} found${matches.length > displayItems.length ? `, showing top ${displayItems.length}` : ""}${useMinRolls ? ", min rolls" : ""}):</b>`;
 
             let filterTags = [];
+            if (useMinRolls) filterTags.push("rolls: <b>minimum</b>");
             if (typeFilter) filterTags.push(`type: <b>${escapeHtml(typeFilter)}</b>`);
             if (rarityFilter) filterTags.push(`rarity: <b>${escapeHtml(rarityFilter)}</b>`);
             if (lvlMin > 0 || lvlMax < 121) filterTags.push(`lvl: <b>${lvlMin}-${lvlMax}</b>`);
